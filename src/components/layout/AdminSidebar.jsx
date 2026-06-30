@@ -29,7 +29,7 @@ const navItems = [
   { label: 'Payments',  icon: BadgeDollarSign,  to: '/admin/payments' },
   { label: 'Plans',     icon: CreditCard,       to: '/admin/plans' },
   { label: 'Wallet',    icon: Wallet,           to: '/admin/wallet' },
-  { label: 'VoIP',      icon: Phone,            to: '/admin/voip' },
+  { label: 'Phone Calls', icon: Phone,           to: '/admin/voip' },
   { label: 'Support',   icon: MessageSquare,    to: '/admin/support' },
   { label: 'Notifications', icon: BellRing,       to: '/admin/notifications' },
   { label: 'Content',   icon: FileEdit,         to: '/admin/content' },

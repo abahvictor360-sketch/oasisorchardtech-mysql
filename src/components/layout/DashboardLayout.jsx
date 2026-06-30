@@ -16,7 +16,7 @@ function getPageTitle(pathname) {
     '/dashboard/invoices': 'Invoices',
     '/dashboard/support': 'Support',
     '/dashboard/profile': 'Profile',
-    '/dashboard/voip':    'VoIP Calls',
+    '/dashboard/voip':    'Phone Calls',
   };
   return map[pathname] || 'Dashboard';
 }

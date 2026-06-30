@@ -61,7 +61,7 @@ export default function Softphone() {
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <div className="flex items-center gap-2">
           <Wifi size={16} className="text-[#1bb0ce]" />
-          <span className="text-white text-sm font-semibold">Oasis VoIP</span>
+          <span className="text-white text-sm font-semibold">Oasis Phones</span>
         </div>
         {/* Status indicator */}
         <div className="flex items-center gap-1.5">
@@ -193,7 +193,7 @@ export default function Softphone() {
       {(!voipEnabled || !hasCallCapacity) && isIdle && (
         <div className="mx-4 mb-4 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 text-center">
           <p className="text-amber-400 text-xs font-medium">
-            {!voipEnabled ? 'VoIP service is currently disabled.' : 'No calling credits remaining. Top up to continue.'}
+            {!voipEnabled ? 'Phone service is currently disabled.' : 'No calling credits remaining. Top up to continue.'}
           </p>
         </div>
       )}

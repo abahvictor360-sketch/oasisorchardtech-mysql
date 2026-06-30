@@ -62,9 +62,9 @@ export default function VoIP() {
     if (balance < amt)    { addToast('Insufficient wallet balance.', 'error'); return; }
     setTopping(true);
     try {
-      await deduct(amt, 'VoIP credit top-up');
+      await deduct(amt, 'call credit top-up');
       await topUpVoipCredits(amt);
-      addToast(`$${amt.toFixed(2)} added to VoIP credits!`, 'success');
+      addToast(`$${amt.toFixed(2)} added to call credits!`, 'success');
       setTopUpModal(false);
       setTopUpAmt('');
     } catch (e) {
@@ -84,8 +84,8 @@ export default function VoIP() {
           <Info size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold mb-1">Running in Demo Mode</p>
-            <p>Calls are simulated. To enable real phone calls, your admin needs to connect a VoIP provider
-               (Twilio, Telnyx, or Vonage) in the Admin → VoIP settings.</p>
+            <p>Calls are simulated. To enable real phone calls, your admin needs to connect a call provider
+               (Twilio, Telnyx, or Vonage) in Admin settings.</p>
           </div>
         </div>
       )}
@@ -93,7 +93,7 @@ export default function VoIP() {
       {!voipEnabled && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">
           <AlertTriangle size={18} className="text-red-500 flex-shrink-0" />
-          <p>VoIP service is temporarily disabled by your administrator.</p>
+          <p>Phone service is temporarily disabled by your administrator.</p>
         </div>
       )}
 
@@ -131,16 +131,16 @@ export default function VoIP() {
             </div>
             {remainingPlanMinutes < 30 && (
               <p className="text-xs text-amber-600 mt-2">
-                Low on plan minutes — top up VoIP credits for overages.
+                Low on plan minutes — top up call credits for overages.
               </p>
             )}
           </Card>
 
-          {/* VoIP credits card */}
+          {/* Call credits card */}
           <div className="bg-gradient-to-r from-[#0a1628] to-[#1bb0ce] rounded-xl p-5 text-white flex items-center justify-between gap-4">
             <div>
               <p className="text-white/70 text-sm mb-1 flex items-center gap-1.5">
-                <Zap size={14} /> VoIP Credits
+                <Zap size={14} /> Call Credits
               </p>
               <p className="text-3xl font-bold">{formatCurrency(voipCredits)}</p>
               <p className="text-white/60 text-xs mt-1">Used for calls beyond your plan minutes</p>
@@ -158,7 +158,7 @@ export default function VoIP() {
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-1">
               <Phone size={16} className="text-[#1bb0ce]" />
-              <h3 className="font-semibold text-[#0a1628] text-sm">Your VoIP Number</h3>
+              <h3 className="font-semibold text-[#0a1628] text-sm">Your Phone Number</h3>
             </div>
             {phoneNumber ? (
               <div className="flex items-center gap-3 mt-2">
@@ -264,7 +264,7 @@ export default function VoIP() {
       <Modal
         isOpen={topUpModal}
         onClose={() => { setTopUpModal(false); setTopUpAmt(''); }}
-        title="Top Up VoIP Credits"
+        title="Top Up Call Credits"
         footer={
           <>
             <Button variant="ghost" onClick={() => { setTopUpModal(false); setTopUpAmt(''); }}>Cancel</Button>

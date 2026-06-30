@@ -19,7 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { label: 'Dashboard',  icon: LayoutDashboard, to: '/dashboard',          end: true },
-  { label: 'VoIP Calls', icon: Phone,            to: '/dashboard/voip' },
+  { label: 'Phone Calls', icon: Phone,            to: '/dashboard/voip' },
   { label: 'Wallet',     icon: Wallet,           to: '/dashboard/wallet' },
   { label: 'My Plan',    icon: CreditCard,       to: '/dashboard/plan' },
   { label: 'Purchases',  icon: Package,          to: '/dashboard/purchases' },

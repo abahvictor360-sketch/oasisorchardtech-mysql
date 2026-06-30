@@ -127,7 +127,7 @@ function ProviderSetup() {
     try {
       await saveSetting('provider_config', { ...config, ...creds });
       await saveSetting('voip_enabled',    { value: config.enabled });
-      addToast('VoIP settings saved!', 'success');
+      addToast('Phone call settings saved!', 'success');
       setDirty(false);
     } catch { addToast('Save failed.', 'error'); }
     finally { setSaving(false); }
@@ -142,9 +142,9 @@ function ProviderSetup() {
       <Card className="p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-[#0a1628]">VoIP Service</h3>
+            <h3 className="font-semibold text-[#0a1628]">Phone Call Service</h3>
             <p className="text-sm text-gray-500 mt-0.5">
-              Enable or disable VoIP calling for all users.
+              Enable or disable phone calling for all users.
             </p>
           </div>
           <button
@@ -164,7 +164,7 @@ function ProviderSetup() {
 
       {/* Provider selection */}
       <Card className="p-5">
-        <h3 className="font-semibold text-[#0a1628] mb-4">VoIP Provider</h3>
+        <h3 className="font-semibold text-[#0a1628] mb-4">Call Provider</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
           {PROVIDERS.map(p => (
             <label key={p.id} className={[
@@ -466,7 +466,7 @@ function UserAccounts() {
       {loading ? (
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : accounts.length === 0 ? (
-        <EmptyState icon={Users} title="No VoIP accounts" description="Accounts are auto-created when users first visit the VoIP page." />
+        <EmptyState icon={Users} title="No phone accounts" description="Accounts are auto-created when users first visit the Phone Calls page." />
       ) : (
         <Card>
           <div className="overflow-x-auto">
@@ -546,7 +546,7 @@ function UserAccounts() {
 
             {/* Credits */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">VoIP Credits</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Call Credits</label>
               <div className="flex items-center gap-3">
                 <button onClick={() => adjustCredits(-5)} className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                   <Minus size={14} className="text-gray-600" />
@@ -567,7 +567,7 @@ function UserAccounts() {
             {/* Enable / disable */}
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
               <div>
-                <p className="text-sm font-medium text-[#0a1628]">VoIP Access</p>
+                <p className="text-sm font-medium text-[#0a1628]">Phone Access</p>
                 <p className="text-xs text-gray-500">Allow this user to make/receive calls.</p>
               </div>
               <button
@@ -659,7 +659,7 @@ function Overview() {
             <div className="flex items-start gap-3">
               <span className="w-6 h-6 rounded-full bg-[#1bb0ce] text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
               <div>
-                <p className="font-medium text-[#0a1628]">Choose a VoIP Provider</p>
+                <p className="font-medium text-[#0a1628]">Choose a Call Provider</p>
                 <p className="text-xs text-gray-500 mt-0.5">Go to the <strong>Provider Setup</strong> tab. We recommend Twilio for beginners or Telnyx for lower costs.</p>
               </div>
             </div>

@@ -14,7 +14,7 @@ function getPageTitle(pathname) {
     '/admin/plans': 'Plans',
     '/admin/wallet': 'Wallet',
     '/admin/support': 'Support',
-    '/admin/voip':    'VoIP',
+    '/admin/voip':    'Phone Calls',
     '/admin/content': 'Content',
   };
   return map[pathname] || 'Admin Panel';
