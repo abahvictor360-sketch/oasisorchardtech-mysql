@@ -49,13 +49,18 @@ export default function ShopPage() {
   const [drawerOpen, setDrawerOpen]   = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
 
+  const visibleTabs = useMemo(() =>
+    (Array.isArray(categoryTabs) ? categoryTabs : []).filter(t => t.visible !== false),
+    [categoryTabs]
+  );
+
   const tabCounts = useMemo(() => {
     const counts = { all: products.length };
-    categoryTabs.filter(t => t.key !== 'all').forEach(t => {
+    visibleTabs.filter(t => t.key !== 'all').forEach(t => {
       counts[t.key] = products.filter(p => p.category === t.key).length;
     });
     return counts;
-  }, [products, categoryTabs]);
+  }, [products, visibleTabs]);
 
   const tabFiltered     = useMemo(() =>
     activeTab === 'all' ? products : products.filter(p => p.category === activeTab),
@@ -98,7 +103,7 @@ export default function ShopPage() {
       <div className="bg-white border-b border-gray-100 shadow-sm sticky top-16 z-20">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-center">
-            {categoryTabs.map(tab => {
+            {visibleTabs.map(tab => {
               const Icon = ICON_MAP[tab.icon] || PhoneCall;
               const count = tabCounts[tab.key] ?? 0;
               const isActive = activeTab === tab.key;

@@ -91,6 +91,7 @@ export const content = {
 // ── Users (admin) ─────────────────────────────────────────────
 export const users = {
   list:   ()         => req('/users'),
+  create: (data)     => req('/users', { method: 'POST', body: data }),
   update: (id, data) => req(`/users/${id}`, { method: 'PUT', body: data }),
   remove: (id)       => req(`/users/${id}`, { method: 'DELETE' }),
 };

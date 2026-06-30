@@ -518,9 +518,30 @@ case 'content':
 case 'users':
     authUser($pdo, true);
     if ($r1 === null) {
-        if ($method !== 'GET') err('Method not allowed', 405);
-        $rows = $pdo->query('SELECT * FROM profiles ORDER BY created_at DESC')->fetchAll();
-        send($rows);
+        if ($method === 'GET') {
+            $rows = $pdo->query('SELECT * FROM profiles ORDER BY created_at DESC')->fetchAll();
+            send($rows);
+        } elseif ($method === 'POST') {
+            $b     = body();
+            $email = trim($b['email'] ?? '');
+            $pass  = $b['password'] ?? '';
+            $name  = trim($b['name'] ?? '');
+            $plan  = $b['plan'] ?? 'basic';
+            if (!$email || !$pass) err('Email and password required');
+            if (strlen($pass) < 6) err('Password must be at least 6 characters');
+            $ck = $pdo->prepare('SELECT id FROM users WHERE email = ?');
+            $ck->execute([$email]);
+            if ($ck->fetch()) err('Email already registered', 409);
+            $id   = bin2hex(random_bytes(18));
+            $hash = password_hash($pass, PASSWORD_BCRYPT);
+            $pdo->prepare('INSERT INTO users (id,email,password_hash,role) VALUES (?,?,?,?)')->execute([$id,$email,$hash,'user']);
+            $pdo->prepare('INSERT INTO profiles (id,email,name,plan,role) VALUES (?,?,?,?,?)')->execute([$id,$email,$name,$plan,'user']);
+            $s = $pdo->prepare('SELECT * FROM profiles WHERE id=?');
+            $s->execute([$id]);
+            send($s->fetch(), 201);
+        } else {
+            err('Method not allowed', 405);
+        }
     } elseif ($method === 'PUT') {
         $b = body();
         $pdo->prepare('UPDATE profiles SET name=?,phone=?,address=?,plan=?,status=?,wallet_balance=? WHERE id=?')->execute([

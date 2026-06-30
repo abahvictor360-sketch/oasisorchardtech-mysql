@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Eye, Edit2, PlusCircle, Ban, Trash2, Search, ChevronLeft, ChevronRight, RefreshCw, CheckCircle, UserCheck } from 'lucide-react';
+import { Eye, Edit2, PlusCircle, Ban, Trash2, Search, ChevronLeft, ChevronRight, RefreshCw, CheckCircle, UserCheck, UserPlus } from 'lucide-react';
 import { users as usersApi, wallet as walletApi } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDate, getInitials } from '../../utils/helpers';
@@ -36,11 +36,13 @@ export default function Users() {
   const [planModal,     setPlanModal]     = useState(null);
   const [creditModal,   setCreditModal]   = useState(null);
   const [confirmModal,  setConfirmModal]  = useState(null);
+  const [addModal,      setAddModal]      = useState(false);
 
   // form state
   const [selectedPlan,  setSelectedPlan]  = useState('');
   const [creditAmount,  setCreditAmount]  = useState('');
   const [creditNote,    setCreditNote]    = useState('');
+  const [newUser,       setNewUser]       = useState({ name: '', email: '', password: '', plan: 'basic' });
 
   // ── Load users from Supabase ──
   const loadUsers = async () => {
@@ -128,6 +130,22 @@ export default function Users() {
     } finally { setSaving(false); }
   };
 
+  // Create new user (admin)
+  const handleAddUser = async () => {
+    if (!newUser.email || !newUser.password) { addToast('Email and password are required.', 'error'); return; }
+    setSaving(true);
+    try {
+      const { data, error } = await usersApi.create(newUser);
+      if (error) throw new Error(error.message);
+      setUsers(prev => [data, ...prev]);
+      setAddModal(false);
+      setNewUser({ name: '', email: '', password: '', plan: 'basic' });
+      addToast(`User ${data.email} created successfully.`, 'success');
+    } catch (err) {
+      addToast('Create failed: ' + err.message, 'error');
+    } finally { setSaving(false); }
+  };
+
   // Delete user (removes profile; auth user remains)
   const handleDelete = async (user) => {
     setSaving(true);
@@ -149,9 +167,14 @@ export default function Users() {
           <h2 className="text-xl font-bold text-[#0a1628]">User Management</h2>
           <p className="text-sm text-gray-500 mt-0.5">{users.length} registered users</p>
         </div>
-        <Button variant="outline" onClick={loadUsers} disabled={loading}>
-          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="primary" onClick={() => setAddModal(true)}>
+            <UserPlus size={15} /> Add User
+          </Button>
+          <Button variant="outline" onClick={loadUsers} disabled={loading}>
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -378,6 +401,57 @@ export default function Users() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Add User Modal */}
+      <Modal isOpen={addModal} onClose={() => setAddModal(false)} title="Add New User"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setAddModal(false)}>Cancel</Button>
+            <Button onClick={handleAddUser} loading={saving}>Create User</Button>
+          </>
+        }>
+        <div className="space-y-4">
+          {[
+            { label: 'Full Name',       key: 'name',     type: 'text',     placeholder: 'Jane Doe',           required: false },
+            { label: 'Email Address',   key: 'email',    type: 'email',    placeholder: 'jane@example.com',   required: true },
+            { label: 'Password',        key: 'password', type: 'password', placeholder: 'Min. 6 characters',  required: true },
+          ].map(({ label, key, type, placeholder, required }) => (
+            <div key={key}>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+              </label>
+              <input
+                type={type}
+                value={newUser[key]}
+                onChange={e => setNewUser(prev => ({ ...prev, [key]: e.target.value }))}
+                placeholder={placeholder}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1bb0ce]/40"
+              />
+            </div>
+          ))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Plan</label>
+            <div className="space-y-2">
+              {PLAN_OPTIONS.map(plan => (
+                <label key={plan.value} className={[
+                  'flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors',
+                  newUser.plan === plan.value ? 'border-[#1bb0ce] bg-[#1bb0ce]/5' : 'border-gray-100 hover:border-gray-200',
+                ].join(' ')}>
+                  <input type="radio" name="new_plan" value={plan.value}
+                    checked={newUser.plan === plan.value}
+                    onChange={() => setNewUser(prev => ({ ...prev, plan: plan.value }))}
+                    className="accent-[#1bb0ce]" />
+                  <div className="flex-1">
+                    <div className="font-medium text-[#0a1628] text-sm">{plan.label}</div>
+                    <div className="text-xs text-gray-500">${plan.price}/month</div>
+                  </div>
+                  {newUser.plan === plan.value && <CheckCircle size={16} className="text-[#1bb0ce]" />}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
       </Modal>
 
       {/* Confirm Modal (Suspend / Delete) */}

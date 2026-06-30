@@ -16,13 +16,15 @@ import {
   Phone,
   BadgeDollarSign,
   BellRing,
+  Tag,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { label: 'Overview',  icon: LayoutDashboard, to: '/admin',          end: true },
   { label: 'Users',     icon: Users,            to: '/admin/users' },
-  { label: 'Products',  icon: Package,          to: '/admin/products' },
+  { label: 'Products',   icon: Package,          to: '/admin/products' },
+  { label: 'Categories', icon: Tag,             to: '/admin/categories' },
   { label: 'Orders',    icon: ShoppingBag,      to: '/admin/orders' },
   { label: 'Payments',  icon: BadgeDollarSign,  to: '/admin/payments' },
   { label: 'Plans',     icon: CreditCard,       to: '/admin/plans' },
