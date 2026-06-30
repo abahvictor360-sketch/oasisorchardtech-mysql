@@ -88,7 +88,7 @@ export default function ShopPage() {
       {/* Category Tabs */}
       <div className="bg-white border-b border-gray-100 shadow-sm sticky top-16 z-20">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-center">
             {categoryTabs.map(tab => {
               const Icon = ICON_MAP[tab.icon] || PhoneCall;
               const count = tabCounts[tab.key] ?? 0;
