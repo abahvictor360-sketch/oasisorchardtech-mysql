@@ -11,6 +11,7 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import DashboardLayout from './components/layout/DashboardLayout';
 import AdminLayout from './components/layout/AdminLayout';
+import WhatsAppChat from './components/layout/WhatsAppChat';
 
 // ── Lazy page imports ──────────────────────────────────────────
 // Public pages
@@ -81,6 +82,7 @@ function PublicLayout({ children }) {
       <Navbar />
       <main className="flex-1">{children}</main>
       <Footer />
+      <WhatsAppChat />
     </div>
   );
 }

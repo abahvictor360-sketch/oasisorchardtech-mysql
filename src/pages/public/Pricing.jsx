@@ -4,6 +4,8 @@ import { Check, X, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { servicePlans } from '../../data/products';
+import SEO from '../../components/seo/SEO';
+import { pricingFaqSchema } from '../../lib/schemas';
 
 const featureComparison = [
   { feature: 'Unlimited Local Calls', basic: true, smart: true, business: true },
@@ -63,6 +65,13 @@ export default function Pricing() {
   const getPeriodLabel = () => (annual ? '/yr' : '/mo');
 
   return (
+    <>
+      <SEO
+        title="Phone Plans & Pricing — From $10/Month"
+        description="Compare Oasis Orchard Technologies VoIP phone plans: Basic Connect $10/mo, Smart Connect $20/mo, Business Connect $35/mo. No contracts, no hidden fees."
+        canonical="/pricing"
+        schema={pricingFaqSchema}
+      />
     <div className="min-h-screen">
       {/* ── HERO ── */}
       <section
@@ -269,5 +278,6 @@ export default function Pricing() {
         </div>
       </section>
     </div>
+    </>
   );
 }

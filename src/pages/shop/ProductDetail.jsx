@@ -24,6 +24,8 @@ import QuantitySelector from '../../components/ui/QuantitySelector';
 import ProductTabs from '../../components/shop/ProductTabs';
 import ProductCard from '../../components/shop/ProductCard';
 import QuickViewModal from '../../components/shop/QuickViewModal';
+import SEO from '../../components/seo/SEO';
+import { productSchema } from '../../lib/schemas';
 
 const TRUST_BADGES = [
   { icon: BookOpen, label: 'Free Setup Guide' },
@@ -105,6 +107,15 @@ export default function ProductDetail() {
   };
 
   return (
+    <>
+      <SEO
+        title={`${product.name} — Grandstream Wireless VoIP Phone`}
+        description={product.shortDesc + ` Buy the ${product.name} from Oasis Orchard Technologies, Canada's authorized Grandstream reseller. CA$${product.price.toFixed(2)}.`}
+        canonical={`/shop/${product.id}`}
+        image={`https://oasisorchardtech.com${product.image}`}
+        type="og:product"
+        schema={productSchema(product)}
+      />
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Breadcrumb */}
@@ -318,5 +329,6 @@ export default function ProductDetail() {
         onClose={() => setQuickViewProduct(null)}
       />
     </div>
+    </>
   );
 }

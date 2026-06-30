@@ -7,6 +7,8 @@ import {
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { usePageSection } from '../../hooks/usePageSection';
+import SEO from '../../components/seo/SEO';
+import { servicesFaqSchema, organizationSchema } from '../../lib/schemas';
 
 // ── Icons for service cards (fixed — not editable) ────────────
 const CARD_ICONS = [Phone, Wifi, Globe, ShieldCheck];
@@ -72,6 +74,13 @@ export default function Services() {
   const cta       = data.services_cta       ?? DEFAULTS.services_cta;
 
   return (
+    <>
+      <SEO
+        title="VoIP Phone Services — Wireless Plans for Home & Business"
+        description="Explore Oasis Orchard Technologies' wireless VoIP phone services: home phone, mobile WiFi phones, and business plans. Easy setup, HD audio, plans from $10/month."
+        canonical="/services"
+        schema={[organizationSchema, servicesFaqSchema]}
+      />
     <div className="min-h-screen">
       {/* ── HERO ── */}
       <section className="relative py-24" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}>
@@ -238,5 +247,6 @@ export default function Services() {
         </div>
       </section>
     </div>
+    </>
   );
 }

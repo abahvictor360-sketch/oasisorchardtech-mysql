@@ -6,6 +6,8 @@ import { usePageSection } from '../../hooks/usePageSection';
 import ProductGrid from '../../components/shop/ProductGrid';
 import FilterSidebar from '../../components/shop/FilterSidebar';
 import QuickViewModal from '../../components/shop/QuickViewModal';
+import SEO from '../../components/seo/SEO';
+import { productListSchema } from '../../lib/schemas';
 
 const ICON_MAP = { PhoneCall, Smartphone, Monitor };
 
@@ -65,6 +67,13 @@ export default function ShopPage() {
   const handleReset = () => { setFilters(DEFAULT_FILTERS); setSort('featured'); };
 
   return (
+    <>
+      <SEO
+        title="Shop Grandstream Wireless VoIP Phones"
+        description="Buy Grandstream WiFi cordless phones in Canada — GRWP810, GRWP816, GRWP822, GRWP825. HD audio, easy plug-and-play setup. Free delivery. Authorized reseller."
+        canonical="/shop"
+        schema={productListSchema(products)}
+      />
     <div className="min-h-screen bg-gray-50">
 
       {/* Hero Banner */}
@@ -196,5 +205,6 @@ export default function ShopPage() {
         onClose={() => setQuickViewProduct(null)}
       />
     </div>
+    </>
   );
 }

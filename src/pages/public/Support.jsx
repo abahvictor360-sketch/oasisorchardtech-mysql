@@ -15,6 +15,7 @@ import {
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
+import SEO from '../../components/seo/SEO';
 
 const quickLinks = [
   {
@@ -163,6 +164,12 @@ export default function Support() {
   };
 
   return (
+    <>
+      <SEO
+        title="Support — Get Help with Your Phone Service"
+        description="Need help? Contact Oasis Orchard Technologies support by phone, email, or live chat. Browse FAQs and troubleshooting guides for your wireless VoIP phone."
+        canonical="/support"
+      />
     <div className="min-h-screen">
       {/* ── HERO ── */}
       <section
@@ -396,5 +403,6 @@ export default function Support() {
         </div>
       </section>
     </div>
+    </>
   );
 }

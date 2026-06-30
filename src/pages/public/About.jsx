@@ -3,6 +3,8 @@ import { Heart, Shield, Lightbulb, Users, Building2, Award } from 'lucide-react'
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { usePageSection } from '../../hooks/usePageSection';
+import SEO from '../../components/seo/SEO';
+import { organizationSchema } from '../../lib/schemas';
 
 // ── Icons for core values (fixed — not editable) ─────────────
 const VALUE_ICONS = [Heart, Shield, Lightbulb, Users];
@@ -53,6 +55,13 @@ export default function About() {
   const cta       = data.about_cta           ?? DEFAULTS.about_cta;
 
   return (
+    <>
+      <SEO
+        title="About Us — Authorized VoIP Reseller in Canada"
+        description="Learn about Oasis Orchard Technologies — our mission, values, and team. We are an authorized wireless phone reseller serving businesses and homes across Canada."
+        canonical="/about"
+        schema={organizationSchema}
+      />
     <div className="min-h-screen">
       {/* ── HERO ── */}
       <section className="relative py-24" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}>
@@ -188,5 +197,6 @@ export default function About() {
         </div>
       </section>
     </div>
+    </>
   );
 }

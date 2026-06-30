@@ -8,6 +8,8 @@ import Card from '../../components/ui/Card';
 import { products, servicePlans } from '../../data/products';
 import { useHomeLayout } from '../../hooks/useHomeLayout';
 import { usePageSection } from '../../hooks/usePageSection';
+import SEO from '../../components/seo/SEO';
+import { organizationSchema, localBusinessSchema, websiteSchema, homeFaqSchema, homeHowToSchema } from '../../lib/schemas';
 
 const whyChooseUs = [
   { icon: Mic2,       title: 'Crystal Clear Audio',  description: 'Experience HD voice quality on every call. Our wireless phone technology delivers studio-grade clarity that makes every conversation feel like an in-person meeting.' },
@@ -347,6 +349,13 @@ export default function Home() {
   }
 
   return (
+    <>
+      <SEO
+        title="Crystal-Clear Wireless Phone Service in Canada"
+        description="Oasis Orchard Technologies — authorized VoIP reseller offering Grandstream wireless phones and phone plans from $10/month. Easy setup, HD audio, Canada-wide."
+        canonical="/"
+        schema={[organizationSchema, localBusinessSchema, websiteSchema, homeFaqSchema, homeHowToSchema]}
+      />
     <div className="min-h-screen">
       {layout
         .filter(s => s.visible !== false)
@@ -362,5 +371,6 @@ export default function Home() {
         })
       }
     </div>
+    </>
   );
 }
