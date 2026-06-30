@@ -145,8 +145,8 @@ function ProductsSection() {
           <p className="text-gray-500 text-lg max-w-xl mx-auto">Browse our selection of Grandstream wireless phones built for crystal-clear communication.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {products.map(product => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          {products.slice(0, 4).map(product => (
             <Card key={product.id} hover className="overflow-hidden group">
               <div className="bg-gray-100 h-48 flex items-center justify-center group-hover:bg-gray-200 transition-colors">
                 {product.image
