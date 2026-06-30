@@ -1,181 +1,174 @@
-import { useState } from 'react';
-import { CreditCard, Wallet, Clock, AlertCircle, CheckCircle } from 'lucide-react';
+import { forwardRef, useImperativeHandle } from 'react';
+import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { PayPalButtons } from '@paypal/react-paypal-js';
+import { Wallet, Clock, AlertCircle, CheckCircle, CreditCard } from 'lucide-react';
 import { formatCurrency } from '../../utils/helpers';
 
-const inputClass =
-  'w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#1bb0ce] focus:ring-1 focus:ring-[#1bb0ce] transition-colors duration-150';
+// ── Stripe card form (must be inside <Elements>) ──────────────
+export const StripeForm = forwardRef(function StripeForm({ onSuccess, onError }, ref) {
+  const stripe   = useStripe();
+  const elements = useElements();
 
-function formatCardNumber(value) {
-  return value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+  useImperativeHandle(ref, () => ({
+    async submit() {
+      if (!stripe || !elements) { onError('Stripe not ready'); return false; }
+      const { error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.origin + '/order-success' },
+        redirect: 'if_required',
+      });
+      if (error) { onError(error.message); return false; }
+      if (paymentIntent?.status === 'succeeded') { onSuccess(paymentIntent.id); return true; }
+      return false;
+    },
+  }));
+
+  return (
+    <div className="pt-2">
+      <PaymentElement options={{ layout: 'tabs' }} />
+    </div>
+  );
+});
+
+// ── PayPal section ────────────────────────────────────────────
+function PayPalSection({ onCreateOrder, onApprove, onError }) {
+  return (
+    <div className="pt-2">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-4 text-sm text-blue-700">
+        Click the PayPal button below. You will be redirected to PayPal to complete your payment securely.
+      </div>
+      <PayPalButtons
+        style={{ layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' }}
+        createOrder={onCreateOrder}
+        onApprove={onApprove}
+        onError={(e) => onError(e.message || 'PayPal error')}
+      />
+    </div>
+  );
 }
 
-function formatExpiry(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 4);
-  if (digits.length > 2) return digits.slice(0, 2) + '/' + digits.slice(2);
-  return digits;
+// ── Wallet section ────────────────────────────────────────────
+function WalletSection({ walletBalance, orderTotal }) {
+  const ok = walletBalance >= orderTotal;
+  return (
+    <div className="pt-2">
+      <div className={['rounded-xl p-5 border-2', ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'].join(' ')}>
+        <div className="flex items-center gap-3 mb-3">
+          <Wallet size={22} className={ok ? 'text-green-500' : 'text-red-500'} />
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Your Balance</p>
+            <p className={`text-2xl font-bold ${ok ? 'text-green-700' : 'text-red-600'}`}>
+              {formatCurrency(walletBalance)}
+            </p>
+          </div>
+        </div>
+        {ok ? (
+          <div className="flex items-center gap-2 text-green-700 text-sm">
+            <CheckCircle size={16} />
+            <span>Sufficient balance to complete this order.</span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 text-red-600 text-sm">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>
+              Insufficient balance. You need{' '}
+              <strong>{formatCurrency(orderTotal - walletBalance)}</strong> more.
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
-const METHODS = [
-  { id: 'card', label: 'Credit Card', icon: CreditCard },
-  { id: 'wallet', label: 'Wallet Balance', icon: Wallet },
-  { id: 'later', label: 'Pay Later', icon: Clock },
-];
-
-export default function PaymentMethod({ selectedMethod, onMethodChange, walletBalance = 0, orderTotal = 0 }) {
-  const [cardData, setCardData] = useState({
-    number: '',
-    expiry: '',
-    cvv: '',
-    name: '',
-  });
-  const [showCvv, setShowCvv] = useState(false);
-
-  const handleCardChange = (e) => {
-    const { name, value } = e.target;
-    let formatted = value;
-    if (name === 'number') formatted = formatCardNumber(value);
-    if (name === 'expiry') formatted = formatExpiry(value);
-    if (name === 'cvv') formatted = value.replace(/\D/g, '').slice(0, 4);
-    setCardData((prev) => ({ ...prev, [name]: formatted }));
-  };
-
-  const walletSufficient = walletBalance >= orderTotal;
+// ── Main PaymentMethod component ──────────────────────────────
+export default function PaymentMethod({
+  method,
+  onMethodChange,
+  stripeEnabled,
+  paypalEnabled,
+  clientSecretReady,
+  stripeFormRef,
+  onStripeError,
+  onStripeSuccess,
+  onPayPalCreate,
+  onPayPalApprove,
+  onPayPalError,
+  walletBalance = 0,
+  orderTotal    = 0,
+}) {
+  const tabs = [
+    stripeEnabled  && { id: 'stripe',  label: 'Credit / Debit Card', icon: CreditCard },
+    paypalEnabled  && { id: 'paypal',  label: 'PayPal',              icon: null },
+    { id: 'wallet', label: 'Wallet Balance', icon: Wallet },
+    { id: 'later',  label: 'Pay Later',      icon: Clock  },
+  ].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-4">
       {/* Method tabs */}
-      <div className="flex gap-2">
-        {METHODS.map(({ id, label, icon: Icon }) => (
+      <div className="flex flex-wrap gap-2">
+        {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
+            type="button"
             onClick={() => onMethodChange(id)}
             className={[
-              'flex-1 flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 text-xs font-medium transition-all duration-150',
-              selectedMethod === id
+              'flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all duration-150',
+              method === id
                 ? 'border-[#1bb0ce] bg-[#e0f7fb] text-[#1bb0ce]'
                 : 'border-gray-200 text-gray-500 hover:border-gray-300',
             ].join(' ')}
           >
-            <Icon size={18} />
-            <span className="hidden sm:block">{label}</span>
+            {id === 'paypal' ? (
+              <span className="font-extrabold tracking-tight">
+                <span style={{ color: '#003087' }}>Pay</span>
+                <span style={{ color: '#009cde' }}>Pal</span>
+              </span>
+            ) : (
+              <>
+                {Icon && <Icon size={16} />}
+                <span>{label}</span>
+              </>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Credit Card Form */}
-      {selectedMethod === 'card' && (
-        <div className="flex flex-col gap-4 pt-2">
-          <div>
-            <label className="block text-sm font-medium text-[#0a1628] mb-1">Card Number</label>
-            <input
-              name="number"
-              type="text"
-              inputMode="numeric"
-              value={cardData.number}
-              onChange={handleCardChange}
-              placeholder="1234 5678 9012 3456"
-              className={inputClass}
-              maxLength={19}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[#0a1628] mb-1">Expiry (MM/YY)</label>
-              <input
-                name="expiry"
-                type="text"
-                inputMode="numeric"
-                value={cardData.expiry}
-                onChange={handleCardChange}
-                placeholder="MM/YY"
-                className={inputClass}
-                maxLength={5}
-              />
+      {/* Stripe */}
+      {method === 'stripe' && (
+        clientSecretReady
+          ? <StripeForm ref={stripeFormRef} onSuccess={onStripeSuccess} onError={onStripeError} />
+          : <div className="pt-4 flex items-center gap-2 text-gray-400 text-sm">
+              <div className="w-4 h-4 border-2 border-[#1bb0ce] border-t-transparent rounded-full animate-spin" />
+              Loading secure payment form…
             </div>
-            <div>
-              <label className="block text-sm font-medium text-[#0a1628] mb-1">CVV</label>
-              <div className="relative">
-                <input
-                  name="cvv"
-                  type={showCvv ? 'text' : 'password'}
-                  inputMode="numeric"
-                  value={cardData.cvv}
-                  onChange={handleCardChange}
-                  placeholder="•••"
-                  className={inputClass}
-                  maxLength={4}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCvv((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600"
-                >
-                  {showCvv ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[#0a1628] mb-1">Name on Card</label>
-            <input
-              name="name"
-              type="text"
-              value={cardData.name}
-              onChange={handleCardChange}
-              placeholder="John Doe"
-              className={inputClass}
-            />
-          </div>
-        </div>
       )}
 
-      {/* Wallet Balance */}
-      {selectedMethod === 'wallet' && (
-        <div className="pt-2">
-          <div className={[
-            'rounded-xl p-5 border-2',
-            walletSufficient
-              ? 'bg-green-50 border-green-200'
-              : 'bg-red-50 border-red-200',
-          ].join(' ')}>
-            <div className="flex items-center gap-3 mb-3">
-              <Wallet size={22} className={walletSufficient ? 'text-green-500' : 'text-red-500'} />
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Your Balance</p>
-                <p className={`text-2xl font-bold ${walletSufficient ? 'text-green-700' : 'text-red-600'}`}>
-                  {formatCurrency(walletBalance)}
-                </p>
-              </div>
-            </div>
-            {walletSufficient ? (
-              <div className="flex items-center gap-2 text-green-700 text-sm">
-                <CheckCircle size={16} />
-                <span>Sufficient balance to complete this order.</span>
-              </div>
-            ) : (
-              <div className="flex items-start gap-2 text-red-600 text-sm">
-                <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-                <span>
-                  Insufficient balance. You need{' '}
-                  <strong>{formatCurrency(orderTotal - walletBalance)}</strong> more.
-                  Please top up or choose another payment method.
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* PayPal */}
+      {method === 'paypal' && (
+        <PayPalSection
+          onCreateOrder={onPayPalCreate}
+          onApprove={onPayPalApprove}
+          onError={onPayPalError}
+        />
+      )}
+
+      {/* Wallet */}
+      {method === 'wallet' && (
+        <WalletSection walletBalance={walletBalance} orderTotal={orderTotal} />
       )}
 
       {/* Pay Later */}
-      {selectedMethod === 'later' && (
+      {method === 'later' && (
         <div className="pt-2">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex gap-3">
-            <Clock size={20} className="text-blue-500 flex-shrink-0 mt-0.5" />
+            <Clock size={20} className="text-blue-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-blue-800 mb-1">Pay Later — Invoice on Delivery</p>
+              <p className="text-sm font-semibold text-blue-800 mb-1">Invoice on Delivery</p>
               <p className="text-sm text-blue-700 leading-relaxed">
-                You will be invoiced within 24 hours of placing your order. Payment is due within 7
-                business days. Available for verified business accounts only.
+                You will be invoiced within 24 hours. Payment due within 7 business days.
+                Available for verified business accounts only.
               </p>
             </div>
           </div>

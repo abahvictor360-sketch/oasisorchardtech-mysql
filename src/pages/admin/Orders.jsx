@@ -1,207 +1,242 @@
-import { useState } from 'react';
-import { Printer, MapPin, CreditCard, Package } from 'lucide-react';
-import { orders as mockOrders, users } from '../../data/mockData';
+import { useState, useEffect } from 'react';
+import { Eye, RefreshCw, Package } from 'lucide-react';
+import { orders as ordersApi } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
+import Spinner from '../../components/ui/Spinner';
 
-const STATUS_TABS = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered'];
+const STATUS_TABS    = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered'];
 const STATUS_OPTIONS = ['pending', 'processing', 'shipped', 'delivered'];
 
 const statusVariant = {
-  pending: 'warning',
+  pending:    'warning',
   processing: 'info',
-  shipped: 'info',
-  delivered: 'success',
+  shipped:    'info',
+  delivered:  'success',
+  paid:       'success',
+  failed:     'error',
 };
 
-const userMap = Object.fromEntries(users.map(u => [u.id, u.name]));
+const paymentBadge = { pending: 'warning', paid: 'success', failed: 'error' };
 
 export default function Orders() {
   const { addToast } = useApp();
-  const [orders, setOrders] = useState([...mockOrders].sort((a, b) => new Date(b.date) - new Date(a.date)));
+  const [orders,       setOrders]       = useState([]);
+  const [loading,      setLoading]      = useState(true);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [detailModal, setDetailModal] = useState(null);
-  const [newStatus, setNewStatus] = useState('');
+  const [dateFrom,     setDateFrom]     = useState('');
+  const [dateTo,       setDateTo]       = useState('');
+  const [detailModal,  setDetailModal]  = useState(null);
+  const [detailItems,  setDetailItems]  = useState([]);
+  const [newStatus,    setNewStatus]    = useState('');
+  const [updating,     setUpdating]     = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    ordersApi.list().then(({ data }) => {
+      setOrders(data || []);
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => { load(); }, []);
 
   const filtered = orders.filter(o => {
     const matchStatus = statusFilter === 'All' || o.status === statusFilter.toLowerCase();
-    const matchFrom = !dateFrom || o.date >= dateFrom;
-    const matchTo = !dateTo || o.date <= dateTo;
+    const matchFrom   = !dateFrom || o.created_at?.slice(0,10) >= dateFrom;
+    const matchTo     = !dateTo   || o.created_at?.slice(0,10) <= dateTo;
     return matchStatus && matchFrom && matchTo;
   });
 
-  const openDetail = (order) => {
+  const openDetail = async (order) => {
     setDetailModal(order);
     setNewStatus(order.status);
+    const { data } = await ordersApi.get(order.id);
+    setDetailItems(data?.items || []);
   };
 
-  const handleStatusUpdate = () => {
-    setOrders(prev => prev.map(o => o.id === detailModal.id ? { ...o, status: newStatus } : o));
-    setDetailModal(prev => ({ ...prev, status: newStatus }));
-    addToast(`Order status updated to "${newStatus}".`, 'success');
+  const handleStatusUpdate = async () => {
+    if (!detailModal || newStatus === detailModal.status) return;
+    setUpdating(true);
+    const { error } = await ordersApi.update(detailModal.id, { status: newStatus });
+    if (error) { addToast('Failed to update status', 'error'); }
+    else {
+      addToast('Order status updated', 'success');
+      setOrders(prev => prev.map(o => o.id === detailModal.id ? { ...o, status: newStatus } : o));
+      setDetailModal(prev => ({ ...prev, status: newStatus }));
+    }
+    setUpdating(false);
   };
+
+  // Stats
+  const totalRevenue = orders.filter(o => o.payment_status === 'paid').reduce((s, o) => s + parseFloat(o.total || 0), 0);
+  const pendingCount = orders.filter(o => o.status === 'pending').length;
+  const paidCount    = orders.filter(o => o.payment_status === 'paid').length;
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-xl font-bold text-[#0a1628]">Order Management</h2>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="flex gap-2 flex-wrap">
-          {STATUS_TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setStatusFilter(tab)}
-              className={[
-                'px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
-                statusFilter === tab ? 'bg-[#1bb0ce] text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
-              ].join(' ')}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
-          <label className="text-xs text-gray-500">From</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1bb0ce]/50" />
-          <label className="text-xs text-gray-500">To</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1bb0ce]/50" />
-        </div>
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { label: 'Total Orders',   value: orders.length,           color: 'text-[#0a1628]' },
+          { label: 'Pending',        value: pendingCount,            color: 'text-yellow-600' },
+          { label: 'Revenue (Paid)', value: formatCurrency(totalRevenue), color: 'text-green-600' },
+        ].map(s => (
+          <Card key={s.label} className="p-5">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{s.label}</p>
+            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+          </Card>
+        ))}
       </div>
 
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left px-5 py-3 text-gray-500 font-medium">Order #</th>
-                <th className="text-left px-5 py-3 text-gray-500 font-medium hidden md:table-cell">Customer</th>
-                <th className="text-left px-5 py-3 text-gray-500 font-medium hidden lg:table-cell">Items</th>
-                <th className="text-left px-5 py-3 text-gray-500 font-medium">Total</th>
-                <th className="text-left px-5 py-3 text-gray-500 font-medium">Status</th>
-                <th className="text-left px-5 py-3 text-gray-500 font-medium hidden sm:table-cell">Date</th>
-                <th className="text-left px-5 py-3 text-gray-500 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-gray-400">No orders match your filters.</td></tr>
-              ) : filtered.map(order => (
-                <tr key={order.id} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 font-mono text-xs font-semibold text-[#0a1628]">{order.id}</td>
-                  <td className="px-5 py-3 text-gray-700 hidden md:table-cell">{userMap[order.userId] || order.userId}</td>
-                  <td className="px-5 py-3 text-gray-600 hidden lg:table-cell">{order.items.reduce((s, i) => s + i.qty, 0)} item(s)</td>
-                  <td className="px-5 py-3 font-semibold">{formatCurrency(order.total)}</td>
-                  <td className="px-5 py-3">
-                    <Badge variant={statusVariant[order.status] || 'default'} size="sm">
-                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3 text-gray-500 hidden sm:table-cell">{formatDate(order.date)}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-1">
-                      <Button size="sm" variant="outline" onClick={() => openDetail(order)}>View</Button>
-                      <button title="Print Invoice" className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition-colors" onClick={() => addToast('Invoice printed (mock).', 'info')}>
-                        <Printer size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Filters */}
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="flex flex-wrap gap-2">
+            {STATUS_TABS.map(t => (
+              <button
+                key={t}
+                onClick={() => setStatusFilter(t)}
+                className={['px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                  statusFilter === t ? 'bg-[#1bb0ce] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                ].join(' ')}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center">
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+            <span className="text-gray-400 text-sm">to</span>
+            <input type="date" value={dateTo}   onChange={e => setDateTo(e.target.value)}   className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+            <button onClick={load} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
+              <RefreshCw size={15} className={loading ? 'animate-spin text-[#1bb0ce]' : 'text-gray-500'} />
+            </button>
+          </div>
         </div>
       </Card>
 
-      {/* Order Detail Modal */}
-      <Modal
-        isOpen={!!detailModal}
-        onClose={() => setDetailModal(null)}
-        title={`Order ${detailModal?.id}`}
-        size="lg"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => addToast('Invoice printed (mock).', 'info')}>
-              <Printer size={14} /> Print Invoice
-            </Button>
-            <Button onClick={handleStatusUpdate}>Save Status</Button>
-          </>
-        }
-      >
-        {detailModal && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Customer</p>
-                <p className="font-semibold text-[#0a1628]">{userMap[detailModal.userId] || detailModal.userId}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Date</p>
-                <p className="font-semibold text-[#0a1628]">{formatDate(detailModal.date)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 mb-1.5">Update Status</p>
-                <select
-                  value={newStatus}
-                  onChange={e => setNewStatus(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1bb0ce]/50"
-                >
-                  {STATUS_OPTIONS.map(s => (
-                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+      {/* Table */}
+      <Card className="overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16"><Spinner /></div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <Package size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500">No orders found</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  {['Order ID','Customer','Items','Total','Payment','Status','Date',''].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
-                </select>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map(order => (
+                  <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-[#0a1628] font-semibold">{order.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-[#0a1628]">{order.shipping_name}</p>
+                      <p className="text-xs text-gray-400">{order.shipping_email}</p>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate">{order.item_names || '—'}</td>
+                    <td className="px-4 py-3 font-semibold text-[#0a1628]">{formatCurrency(order.total)}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={paymentBadge[order.payment_status] || 'default'}>
+                        {order.payment_method} · {order.payment_status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={statusVariant[order.status] || 'default'}>{order.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(order.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <Button size="xs" variant="outline" onClick={() => openDetail(order)}>
+                        <Eye size={13} />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Detail Modal */}
+      {detailModal && (
+        <Modal isOpen onClose={() => { setDetailModal(null); setDetailItems([]); }} title={`Order ${detailModal.id}`} size="lg">
+          <div className="space-y-5">
+            {/* Status + payment badges */}
+            <div className="flex gap-3 flex-wrap">
+              <Badge variant={statusVariant[detailModal.status] || 'default'}>Status: {detailModal.status}</Badge>
+              <Badge variant={paymentBadge[detailModal.payment_status] || 'default'}>Payment: {detailModal.payment_status}</Badge>
+              <Badge variant="default">Method: {detailModal.payment_method}</Badge>
+            </div>
+
+            {/* Shipping */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Shipping</h4>
+              <div className="bg-gray-50 rounded-xl p-4 text-sm text-[#0a1628] space-y-0.5">
+                <p className="font-semibold">{detailModal.shipping_name}</p>
+                <p>{detailModal.shipping_email} · {detailModal.shipping_phone}</p>
+                <p>{detailModal.shipping_street}</p>
+                <p>{detailModal.shipping_city}, {detailModal.shipping_state} {detailModal.shipping_zip}, {detailModal.shipping_country}</p>
               </div>
             </div>
 
             {/* Items */}
-            <div>
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-[#0a1628] mb-2">
-                <Package size={14} /> Items
-              </h4>
-              <div className="bg-gray-50 rounded-lg divide-y divide-gray-100">
-                {detailModal.items.map((item, i) => (
-                  <div key={i} className="flex justify-between px-4 py-2.5 text-sm">
-                    <span className="text-gray-700">{item.name} <span className="text-gray-400">x{item.qty}</span></span>
-                    <span className="font-semibold">{formatCurrency(item.price * item.qty)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between px-4 py-2.5 text-sm font-bold border-t border-gray-200">
-                  <span>Total</span>
-                  <span className="text-[#1bb0ce]">{formatCurrency(detailModal.total)}</span>
+            {detailItems.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Items</h4>
+                <div className="space-y-2">
+                  {detailItems.map((item, i) => (
+                    <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+                      {item.product_image && <img src={item.product_image} alt={item.product_name} className="w-10 h-10 object-contain rounded" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#0a1628] truncate">{item.product_name}</p>
+                        <p className="text-xs text-gray-400">Qty: {item.quantity} × {formatCurrency(item.unit_price)}</p>
+                      </div>
+                      <p className="font-semibold text-[#0a1628]">{formatCurrency(item.total_price)}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
+            )}
+
+            {/* Total */}
+            <div className="flex justify-between items-center border-t border-gray-100 pt-3">
+              <span className="font-semibold text-[#0a1628]">Total</span>
+              <span className="text-xl font-bold text-[#1bb0ce]">{formatCurrency(detailModal.total)}</span>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <h4 className="flex items-center gap-2 text-sm font-semibold text-[#0a1628] mb-2">
-                  <MapPin size={14} /> Shipping
-                </h4>
-                <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 space-y-0.5">
-                  <p>{detailModal.shippingAddress.street}</p>
-                  <p>{detailModal.shippingAddress.city}, {detailModal.shippingAddress.state} {detailModal.shippingAddress.zip}</p>
-                </div>
-              </div>
-              <div>
-                <h4 className="flex items-center gap-2 text-sm font-semibold text-[#0a1628] mb-2">
-                  <CreditCard size={14} /> Payment
-                </h4>
-                <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700">
-                  {detailModal.paymentMethod}
-                </div>
+            {/* Update status */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Update Status</h4>
+              <div className="flex gap-2">
+                <select
+                  value={newStatus}
+                  onChange={e => setNewStatus(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1bb0ce]"
+                >
+                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+                <Button variant="primary" onClick={handleStatusUpdate} disabled={updating || newStatus === detailModal.status}>
+                  {updating ? <Spinner size="sm" color="white" /> : 'Update'}
+                </Button>
               </div>
             </div>
           </div>
-        )}
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 }

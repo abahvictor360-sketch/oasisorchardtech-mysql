@@ -14,6 +14,7 @@ import {
   ChevronRight,
   X,
   Phone,
+  BadgeDollarSign,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -22,6 +23,7 @@ const navItems = [
   { label: 'Users',     icon: Users,            to: '/admin/users' },
   { label: 'Products',  icon: Package,          to: '/admin/products' },
   { label: 'Orders',    icon: ShoppingBag,      to: '/admin/orders' },
+  { label: 'Payments',  icon: BadgeDollarSign,  to: '/admin/payments' },
   { label: 'Plans',     icon: CreditCard,       to: '/admin/plans' },
   { label: 'Wallet',    icon: Wallet,           to: '/admin/wallet' },
   { label: 'VoIP',      icon: Phone,            to: '/admin/voip' },

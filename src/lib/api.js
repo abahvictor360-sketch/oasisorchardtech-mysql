@@ -101,6 +101,24 @@ export const wallet = {
   credit:       (data) => req('/wallet/credit', { method: 'POST', body: data }),
 };
 
+// ── Payments ─────────────────────────────────────────────────
+export const payments = {
+  config:              ()          => req('/payments/config'),
+  settings:            ()          => req('/payments/settings'),
+  saveSettings:        (data)      => req('/payments/settings', { method: 'PUT', body: data }),
+  createStripeIntent:  (data)      => req('/payments/stripe/create-intent', { method: 'POST', body: data }),
+  createPaypalOrder:   (data)      => req('/payments/paypal/create-order',  { method: 'POST', body: data }),
+  capturePaypal:       (data)      => req('/payments/paypal/capture',        { method: 'POST', body: data }),
+};
+
+// ── Orders ────────────────────────────────────────────────────
+export const orders = {
+  list:   ()         => req('/orders'),
+  create: (data)     => req('/orders', { method: 'POST', body: data }),
+  get:    (id)       => req(`/orders/${id}`),
+  update: (id, data) => req(`/orders/${id}`, { method: 'PATCH', body: data }),
+};
+
 // ── VoIP ──────────────────────────────────────────────────────
 export const voip = {
   getAccount:          ()        => req('/voip/account'),
