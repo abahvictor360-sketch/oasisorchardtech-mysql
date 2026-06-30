@@ -1,0 +1,12 @@
+Options -MultiViews
+RewriteEngine On
+
+# Let actual files and directories through
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Don't rewrite /api/ requests — PHP handles those
+RewriteCond %{REQUEST_URI} !^/api/
+
+# Send everything else to React
+RewriteRule ^ /index.html [QSA,L]
