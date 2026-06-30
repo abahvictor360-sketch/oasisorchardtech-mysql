@@ -50,7 +50,8 @@ const AdminWallet  = lazy(() => import('./pages/admin/Wallet'));
 const AdminSupport = lazy(() => import('./pages/admin/Support'));
 const AdminContent = lazy(() => import('./pages/admin/Content'));
 const AdminVoIP     = lazy(() => import('./pages/admin/VoIP'));
-const AdminPayments = lazy(() => import('./pages/admin/Payments'));
+const AdminPayments      = lazy(() => import('./pages/admin/Payments'));
+const AdminNotifications = lazy(() => import('./pages/admin/Notifications'));
 
 // User VoIP page
 const UserVoIP     = lazy(() => import('./pages/dashboard/VoIP'));
@@ -143,7 +144,8 @@ function App() {
               <Route path="support"   element={<AdminSupport />} />
               <Route path="content"   element={<AdminContent />} />
               <Route path="voip"      element={<AdminVoIP />} />
-              <Route path="payments"  element={<AdminPayments />} />
+              <Route path="payments"      element={<AdminPayments />} />
+              <Route path="notifications" element={<AdminNotifications />} />
             </Route>
 
             {/* Fallback */}

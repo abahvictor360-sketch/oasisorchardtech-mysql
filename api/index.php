@@ -46,6 +46,171 @@ function productRow($row) {
     return $row;
 }
 
+// ── Notification helpers ──────────────────────────────────────
+function notif_settings($pdo) {
+    $rows = $pdo->query("SELECT `key`,`value` FROM notification_settings")->fetchAll();
+    $m = [];
+    foreach ($rows as $r) $m[$r['key']] = $r['value'];
+    return $m;
+}
+
+function notif_set($pdo, $key, $val) {
+    $pdo->prepare("INSERT INTO notification_settings (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)")->execute([$key,$val]);
+}
+
+function build_order_email($order, $items) {
+    $rows = '';
+    foreach ($items as $it) {
+        $rows .= "<tr>
+          <td style='padding:10px 12px;border-bottom:1px solid #eee;color:#0a1628;'>" . htmlspecialchars($it['product_name']) . "</td>
+          <td style='padding:10px 12px;border-bottom:1px solid #eee;text-align:center;color:#555;'>" . (int)$it['quantity'] . "</td>
+          <td style='padding:10px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;color:#0a1628;'>$" . number_format((float)$it['total_price'],2) . "</td>
+        </tr>";
+    }
+    $year    = date('Y');
+    $orderId = htmlspecialchars($order['id']);
+    $name    = htmlspecialchars($order['shipping_name']);
+    $email   = htmlspecialchars($order['shipping_email']);
+    $phone   = htmlspecialchars($order['shipping_phone']);
+    $addr    = htmlspecialchars($order['shipping_street'] . ', ' . $order['shipping_city'] . ', ' . $order['shipping_state'] . ' ' . $order['shipping_zip']);
+    $pm      = htmlspecialchars(ucfirst($order['payment_method']));
+    $ps      = htmlspecialchars(ucfirst($order['payment_status']));
+    $total   = number_format((float)$order['total'],2);
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'></head>
+<body style='margin:0;padding:0;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;'>
+<table width='100%' cellpadding='0' cellspacing='0'><tr><td align='center' style='padding:32px 16px;'>
+<table width='600' cellpadding='0' cellspacing='0' style='max-width:600px;width:100%;'>
+  <!-- Header -->
+  <tr><td style='background:linear-gradient(135deg,#0a1628,#1bb0ce);padding:28px 32px;border-radius:12px 12px 0 0;'>
+    <h1 style='margin:0;color:#fff;font-size:22px;'>Oasis Orchard Technologies</h1>
+    <p style='margin:6px 0 0;color:#b3e8f5;font-size:14px;'>&#128722; New Order Received</p>
+  </td></tr>
+  <!-- Body -->
+  <tr><td style='background:#fff;padding:28px 32px;border:1px solid #e8ecf0;border-top:none;'>
+    <h2 style='margin:0 0 4px;color:#0a1628;font-size:18px;'>Order #$orderId</h2>
+    <p style='margin:0 0 24px;color:#888;font-size:13px;'>Placed on " . date('F j, Y \a\t g:i A') . "</p>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:24px;border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;'>
+      <tr style='background:#f8fafc;'><th colspan='2' style='text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#888;border-bottom:1px solid #e8ecf0;'>Customer</th></tr>
+      <tr><td style='padding:9px 14px;color:#888;font-size:13px;width:35%;'>Name</td><td style='padding:9px 14px;color:#0a1628;font-weight:600;font-size:13px;'>$name</td></tr>
+      <tr style='background:#f8fafc;'><td style='padding:9px 14px;color:#888;font-size:13px;'>Email</td><td style='padding:9px 14px;color:#0a1628;font-size:13px;'>$email</td></tr>
+      <tr><td style='padding:9px 14px;color:#888;font-size:13px;'>Phone</td><td style='padding:9px 14px;color:#0a1628;font-size:13px;'>$phone</td></tr>
+      <tr style='background:#f8fafc;'><td style='padding:9px 14px;color:#888;font-size:13px;'>Ship to</td><td style='padding:9px 14px;color:#0a1628;font-size:13px;'>$addr</td></tr>
+      <tr><td style='padding:9px 14px;color:#888;font-size:13px;'>Payment</td><td style='padding:9px 14px;color:#0a1628;font-size:13px;'>$pm &bull; <span style='color:" . ($order['payment_status']==='paid'?'#16a34a':'#ca8a04') . ";font-weight:600;'>$ps</span></td></tr>
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:16px;border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;'>
+      <tr style='background:#0a1628;'><th style='padding:10px 12px;text-align:left;color:#b3e8f5;font-size:11px;text-transform:uppercase;letter-spacing:.5px;'>Item</th><th style='padding:10px 12px;text-align:center;color:#b3e8f5;font-size:11px;text-transform:uppercase;letter-spacing:.5px;'>Qty</th><th style='padding:10px 12px;text-align:right;color:#b3e8f5;font-size:11px;text-transform:uppercase;letter-spacing:.5px;'>Total</th></tr>
+      $rows
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0'><tr>
+      <td></td>
+      <td width='200' style='background:#f0fbff;border:1px solid #b3e8f5;border-radius:8px;padding:14px 18px;text-align:right;'>
+        <span style='color:#888;font-size:13px;display:block;'>Order Total</span>
+        <span style='color:#0a1628;font-size:22px;font-weight:700;'>$$total CAD</span>
+      </td>
+    </tr></table>
+  </td></tr>
+  <!-- Footer -->
+  <tr><td style='background:#f8fafc;padding:16px 32px;border:1px solid #e8ecf0;border-top:none;border-radius:0 0 12px 12px;text-align:center;'>
+    <p style='margin:0;color:#aaa;font-size:12px;'>&copy; $year Oasis Orchard Technologies &mdash; Admin Notification</p>
+  </td></tr>
+</table></td></tr></table>
+</body></html>";
+}
+
+function send_email_notification($pdo, $order, $items) {
+    $cfg = notif_settings($pdo);
+    if (($cfg['email_enabled'] ?? 'false') !== 'true') return;
+    $to = $cfg['admin_email'] ?? '';
+    if (!$to) return;
+    $subject = '🛒 New Order #' . $order['id'] . ' — $' . number_format((float)$order['total'],2) . ' CAD';
+    $html    = build_order_email($order, $items);
+    $headers = implode("\r\n", [
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'From: Oasis Orchard <noreply@oasisorchard.com>',
+        'X-Mailer: PHP/' . PHP_VERSION,
+    ]);
+    @mail($to, $subject, $html, $headers);
+}
+
+function build_whatsapp_message($order, $items) {
+    $lines   = ["🛒 *New Order Received!*", ""];
+    $lines[] = "📋 *Order:* " . $order['id'];
+    $lines[] = "👤 *Customer:* " . $order['shipping_name'];
+    $lines[] = "📧 *Email:* " . $order['shipping_email'];
+    $lines[] = "📞 *Phone:* " . $order['shipping_phone'];
+    $lines[] = "📍 *Address:* " . $order['shipping_street'] . ", " . $order['shipping_city'] . ", " . $order['shipping_state'];
+    $lines[] = "";
+    $lines[] = "🛍️ *Items:*";
+    foreach ($items as $it)
+        $lines[] = "  • " . $it['product_name'] . " × " . $it['quantity'] . " — $" . number_format((float)$it['total_price'],2);
+    $lines[] = "";
+    $lines[] = "💰 *Total:* $" . number_format((float)$order['total'],2) . " CAD";
+    $lines[] = "💳 *Payment:* " . ucfirst($order['payment_method']) . " (" . $order['payment_status'] . ")";
+    $lines[] = "";
+    $lines[] = "Log in to admin panel to process this order.";
+    return implode("\n", $lines);
+}
+
+function send_whatsapp_notification($pdo, $order, $items) {
+    $cfg = notif_settings($pdo);
+    if (($cfg['whatsapp_enabled'] ?? 'false') !== 'true') return;
+    $provider = $cfg['whatsapp_provider'] ?? 'callmebot';
+    $phone    = preg_replace('/[^0-9+]/', '', $cfg['whatsapp_phone'] ?? '');
+    $apikey   = $cfg['whatsapp_apikey'] ?? '';
+    if (!$phone) return;
+    $message  = build_whatsapp_message($order, $items);
+
+    if ($provider === 'callmebot') {
+        $url = 'https://api.callmebot.com/whatsapp.php?phone=' . urlencode($phone)
+             . '&text=' . urlencode($message) . '&apikey=' . urlencode($apikey);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+        curl_exec($ch); curl_close($ch);
+
+    } elseif ($provider === 'ultramsg') {
+        $instance = $cfg['whatsapp_instance'] ?? '';
+        $ch = curl_init("https://api.ultramsg.com/{$instance}/messages/chat");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query(['token'=>$apikey,'to'=>$phone,'body'=>$message]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+        ]);
+        curl_exec($ch); curl_close($ch);
+
+    } elseif ($provider === 'twilio') {
+        $sid    = $cfg['whatsapp_sid'] ?? '';
+        $secret = $cfg['whatsapp_secret'] ?? '';
+        $from   = $cfg['whatsapp_from'] ?? 'whatsapp:+14155238886';
+        $ch = curl_init("https://api.twilio.com/2010-04-01/Accounts/{$sid}/Messages.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_USERPWD        => $sid . ':' . $secret,
+            CURLOPT_POSTFIELDS     => http_build_query(['From'=>$from,'To'=>'whatsapp:'.$phone,'Body'=>$message]),
+        ]);
+        curl_exec($ch); curl_close($ch);
+    }
+}
+
+function notify_admin_new_order($pdo, $orderId) {
+    try {
+        $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
+        $s->execute([$orderId]);
+        $order = $s->fetch();
+        if (!$order) return;
+        $s2 = $pdo->prepare("SELECT * FROM order_items WHERE order_id=?");
+        $s2->execute([$orderId]);
+        $items = $s2->fetchAll();
+        send_email_notification($pdo, $order, $items);
+        send_whatsapp_notification($pdo, $order, $items);
+    } catch (Exception $e) { /* silent — never break the order flow */ }
+}
+
 // ── Payment helpers ───────────────────────────────────────────
 function pay_settings($pdo) {
     $rows = $pdo->query("SELECT `key`,`value` FROM payment_settings")->fetchAll();
@@ -668,7 +833,10 @@ case 'orders':
 
             $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
             $s->execute([$orderId]);
-            send($s->fetch(), 201);
+            $newOrder = $s->fetch();
+            // Fire notifications (non-blocking — errors are swallowed)
+            notify_admin_new_order($pdo, $orderId);
+            send($newOrder, 201);
 
         } else err('Method not allowed', 405);
 
@@ -700,6 +868,56 @@ case 'orders':
 
         } else err('Method not allowed', 405);
     }
+    break;
+
+// ═══ NOTIFICATIONS ═══════════════════════════════════════════════
+case 'notifications':
+    authUser($pdo, true);
+    $allowed_keys = [
+        'email_enabled','admin_email',
+        'whatsapp_enabled','whatsapp_phone','whatsapp_provider',
+        'whatsapp_apikey','whatsapp_instance','whatsapp_sid','whatsapp_secret','whatsapp_from',
+    ];
+
+    if ($r1 === 'settings') {
+        if ($method === 'GET') {
+            send(notif_settings($pdo));
+        } elseif ($method === 'PUT') {
+            $b = body();
+            foreach ($allowed_keys as $k) {
+                if (array_key_exists($k, $b)) notif_set($pdo, $k, (string)$b[$k]);
+            }
+            send(notif_settings($pdo));
+        } else err('Method not allowed', 405);
+
+    } elseif ($r1 === 'test') {
+        // POST /notifications/test  — send test message right now
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $b    = body();
+        $type = $b['type'] ?? 'email'; // 'email' | 'whatsapp'
+        $fake = [
+            'id'             => 'TEST-ORDER',
+            'shipping_name'  => 'Test Customer',
+            'shipping_email' => $b['email'] ?? 'test@example.com',
+            'shipping_phone' => '+1 555-0100',
+            'shipping_street'=> '123 Test Street',
+            'shipping_city'  => 'Toronto',
+            'shipping_state' => 'Ontario',
+            'shipping_zip'   => 'M5V 1A1',
+            'payment_method' => 'stripe',
+            'payment_status' => 'paid',
+            'total'          => 199.99,
+        ];
+        $fakeItems = [[
+            'product_name'  => 'Grandstream GRWP810 Test',
+            'quantity'      => 1,
+            'total_price'   => 199.99,
+        ]];
+        if ($type === 'email')     send_email_notification($pdo, $fake, $fakeItems);
+        if ($type === 'whatsapp')  send_whatsapp_notification($pdo, $fake, $fakeItems);
+        send(['sent' => true]);
+
+    } else err('Not found', 404);
     break;
 
 default:

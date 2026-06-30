@@ -15,6 +15,7 @@ import {
   X,
   Phone,
   BadgeDollarSign,
+  BellRing,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -28,6 +29,7 @@ const navItems = [
   { label: 'Wallet',    icon: Wallet,           to: '/admin/wallet' },
   { label: 'VoIP',      icon: Phone,            to: '/admin/voip' },
   { label: 'Support',   icon: MessageSquare,    to: '/admin/support' },
+  { label: 'Notifications', icon: BellRing,       to: '/admin/notifications' },
   { label: 'Content',   icon: FileEdit,         to: '/admin/content' },
 ];
 
