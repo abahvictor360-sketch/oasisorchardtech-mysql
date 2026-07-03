@@ -312,10 +312,31 @@ case 'auth':
         $email = trim($b['email'] ?? '');
         $pass  = $b['password'] ?? '';
         if (!$email || !$pass) err('Email and password required');
+
+        // Rate limit: max 5 failed attempts per email+IP in 15 minutes
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        try {
+            $rl = $pdo->prepare('SELECT COUNT(*) c FROM login_attempts WHERE email=? AND ip=? AND attempted_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)');
+            $rl->execute([$email, $ip]);
+            if ((int)$rl->fetch()['c'] >= 5) err('Too many failed attempts. Try again in 15 minutes.', 429);
+        } catch (Exception $e) { /* table missing — skip rate limiting rather than block logins */ }
+
         $s = $pdo->prepare('SELECT * FROM users WHERE email = ?');
         $s->execute([$email]);
         $u = $s->fetch();
-        if (!$u || !password_verify($pass, $u['password_hash'])) err('Invalid credentials', 401);
+        if (!$u || !password_verify($pass, $u['password_hash'])) {
+            try { $pdo->prepare('INSERT INTO login_attempts (email, ip) VALUES (?,?)')->execute([$email, $ip]); } catch (Exception $e) {}
+            err('Invalid credentials', 401);
+        }
+        // Suspended accounts cannot log in
+        $sp = $pdo->prepare('SELECT status FROM profiles WHERE id=?');
+        $sp->execute([$u['id']]);
+        if (($sp->fetch()['status'] ?? 'active') === 'suspended') err('Account suspended. Contact support.', 403);
+        // Success: clear this user's failed attempts and purge expired sessions
+        try {
+            $pdo->prepare('DELETE FROM login_attempts WHERE email=?')->execute([$email]);
+            $pdo->exec('DELETE FROM sessions WHERE expires_at < NOW()');
+        } catch (Exception $e) {}
         // Create token
         $tok     = bin2hex(random_bytes(32));
         $expires = date('Y-m-d H:i:s', strtotime('+7 days'));
@@ -345,6 +366,7 @@ case 'auth':
         $pass  = $b['password'] ?? '';
         $meta  = $b['metadata'] ?? [];
         if (!$email || !$pass) err('Email and password required');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) err('Invalid email address');
         if (strlen($pass) < 6) err('Password must be at least 6 characters');
         // Check duplicate
         $ck = $pdo->prepare('SELECT id FROM users WHERE email = ?');
@@ -406,11 +428,19 @@ case 'profiles':
         $u = authUser($pdo);
         if ($u['id'] !== $uid && $u['role'] !== 'admin') err('Forbidden', 403);
         $b = body();
-        $pdo->prepare('UPDATE profiles SET name=?,phone=?,address=?,plan=?,status=?,wallet_balance=? WHERE id=?')->execute([
-            $b['name'] ?? '', $b['phone'] ?? '', $b['address'] ?? '',
-            $b['plan'] ?? 'basic', $b['status'] ?? 'active',
-            (float)($b['wallet_balance'] ?? 0), $uid,
-        ]);
+        if ($u['role'] === 'admin') {
+            $pdo->prepare('UPDATE profiles SET name=?,phone=?,address=?,plan=?,status=?,wallet_balance=? WHERE id=?')->execute([
+                $b['name'] ?? '', $b['phone'] ?? '', $b['address'] ?? '',
+                $b['plan'] ?? 'basic', $b['status'] ?? 'active',
+                (float)($b['wallet_balance'] ?? 0), $uid,
+            ]);
+        } else {
+            // Regular users may only edit their own contact info —
+            // never plan, status, or wallet_balance (privilege escalation)
+            $pdo->prepare('UPDATE profiles SET name=?,phone=?,address=? WHERE id=?')->execute([
+                $b['name'] ?? '', $b['phone'] ?? '', $b['address'] ?? '', $uid,
+            ]);
+        }
         $s = $pdo->prepare('SELECT * FROM profiles WHERE id = ?');
         $s->execute([$uid]);
         send($s->fetch());
@@ -528,6 +558,7 @@ case 'users':
             $name  = trim($b['name'] ?? '');
             $plan  = $b['plan'] ?? 'basic';
             if (!$email || !$pass) err('Email and password required');
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) err('Invalid email address');
             if (strlen($pass) < 6) err('Password must be at least 6 characters');
             $ck = $pdo->prepare('SELECT id FROM users WHERE email = ?');
             $ck->execute([$email]);
@@ -548,6 +579,10 @@ case 'users':
             $b['name']??'',$b['phone']??'',$b['address']??'',$b['plan']??'basic',
             $b['status']??'active',(float)($b['wallet_balance']??0),$r1,
         ]);
+        // Suspending a user revokes their active sessions immediately
+        if (($b['status'] ?? '') === 'suspended') {
+            $pdo->prepare('DELETE FROM sessions WHERE user_id=?')->execute([$r1]);
+        }
         $s = $pdo->prepare('SELECT * FROM profiles WHERE id=?');
         $s->execute([$r1]);
         send($s->fetch());
@@ -819,10 +854,20 @@ case 'orders':
             $pm       = $b['payment_method'] ?? 'stripe';
             $intentId = $b['stripe_intent_id'] ?? null;
 
+            if ($total <= 0 || empty($items)) err('Invalid order', 400);
+
+            // Wallet payment: verify sufficient balance BEFORE creating the order
+            if ($pm === 'wallet') {
+                $bs = $pdo->prepare('SELECT wallet_balance FROM profiles WHERE id=?');
+                $bs->execute([$u['id']]);
+                $bal = (float)($bs->fetch()['wallet_balance'] ?? 0);
+                if ($bal < $total) err('Insufficient wallet balance', 400);
+            }
+
             $pdo->prepare("INSERT INTO orders (id,user_id,payment_method,payment_status,stripe_intent_id,subtotal,total,shipping_name,shipping_email,shipping_phone,shipping_street,shipping_city,shipping_state,shipping_zip,shipping_country) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([
                     $orderId, $u['id'], $pm,
-                    ($pm === 'wallet' || $pm === 'later') ? 'paid' : 'pending',
+                    $pm === 'wallet' ? 'paid' : 'pending',
                     $intentId,
                     $subtotal, $total,
                     $shipping['fullName'] ?? '', $shipping['email'] ?? '', $shipping['phone'] ?? '',

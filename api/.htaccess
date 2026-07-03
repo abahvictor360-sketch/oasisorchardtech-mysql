@@ -1,3 +1,12 @@
 RewriteEngine On
+
+# Block direct access to config.php (contains DB credentials)
+<Files "config.php">
+  Require all denied
+</Files>
+
+# No directory listing
+Options -Indexes
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.php [QSA,L]

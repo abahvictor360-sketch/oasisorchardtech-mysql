@@ -35,7 +35,13 @@ try {
         ]
     );
 } catch (PDOException $e) {
+    // Never leak connection details (host, user, password hints) to the client
+    error_log('DB connection failed: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
+    echo json_encode(['error' => 'Service temporarily unavailable']);
     exit;
 }
+
+// Hide PHP errors from responses (they leak paths and internals)
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
