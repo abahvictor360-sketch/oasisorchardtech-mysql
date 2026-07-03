@@ -102,7 +102,7 @@ export default function ShopPage() {
       {/* Category Tabs */}
       <div className="bg-white border-b border-gray-100 shadow-sm sticky top-16 z-20">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-center">
+          <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
             {visibleTabs.map(tab => {
               const Icon = ICON_MAP[tab.icon] || PhoneCall;
               const count = tabCounts[tab.key] ?? 0;
@@ -112,7 +112,7 @@ export default function ShopPage() {
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={[
-                    'flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200 focus:outline-none flex-shrink-0',
+                    'flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 focus:outline-none',
                     isActive
                       ? 'bg-[#1bb0ce] text-white shadow-lg shadow-[#1bb0ce]/30'
                       : 'bg-transparent text-[#1bb0ce] border border-[#1bb0ce] hover:bg-[#1bb0ce]/10',
