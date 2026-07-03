@@ -1,10 +1,13 @@
 <?php
 // ── Credentials loader ─────────────────────────────────────────
-// Real credentials live in oasis-config.php ONE LEVEL ABOVE
-// public_html (e.g. /home/u123456789/domains/yourdomain.com/oasis-config.php).
-// Git deploys only touch public_html, so that file survives every redeploy.
-$secretFile = dirname(__DIR__, 2) . '/oasis-config.php';
-if (is_file($secretFile)) require $secretFile;
+// Real credentials live in oasis-config.php OUTSIDE public_html so
+// Git deploys (which wipe public_html) never touch it.
+// The loader searches every parent folder up to the account root,
+// so the file works no matter which level above public_html it's in.
+for ($lvl = 2; $lvl <= 5; $lvl++) {
+    $candidate = dirname(__DIR__, $lvl) . '/oasis-config.php';
+    if (is_file($candidate)) { require $candidate; break; }
+}
 
 // Fallbacks for local development (no secrets committed here)
 if (!defined('DB_HOST'))  define('DB_HOST', 'localhost');
