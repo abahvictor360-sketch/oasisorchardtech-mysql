@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Lock, Upload, User, Shield } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import { auth as authApi } from '../../lib/api';
 import { formatDate, getInitials } from '../../utils/helpers';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -56,9 +57,13 @@ export default function Profile() {
     if (pwForm.newPw.length < 6) { addToast('New password must be at least 6 characters.', 'error'); return; }
     if (pwForm.newPw !== pwForm.confirm) { addToast('Passwords do not match.', 'error'); return; }
     setSavingPw(true);
-    await new Promise(r => setTimeout(r, 1000));
-    addToast('Password updated successfully!', 'success');
-    setPwForm({ current: '', newPw: '', confirm: '' });
+    const { error } = await authApi.changePassword(pwForm.current, pwForm.newPw);
+    if (error) {
+      addToast(error.message || 'Password change failed.', 'error');
+    } else {
+      addToast('Password updated successfully!', 'success');
+      setPwForm({ current: '', newPw: '', confirm: '' });
+    }
     setSavingPw(false);
   };
 

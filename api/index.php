@@ -388,6 +388,25 @@ case 'auth':
         send(['message' => 'Logged out']);
         break;
 
+    case 'change-password':
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $u = authUser($pdo);
+        $b = body();
+        $current = $b['current'] ?? '';
+        $new     = $b['new'] ?? '';
+        if (!$current || !$new) err('Current and new password required');
+        if (strlen($new) < 6) err('New password must be at least 6 characters');
+        $s = $pdo->prepare('SELECT password_hash FROM users WHERE id=?');
+        $s->execute([$u['id']]);
+        $row = $s->fetch();
+        if (!$row || !password_verify($current, $row['password_hash'])) err('Current password is incorrect', 401);
+        $pdo->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([password_hash($new, PASSWORD_BCRYPT), $u['id']]);
+        // Revoke all other sessions — anyone else logged in with the old password is kicked out
+        $t = token();
+        $pdo->prepare('DELETE FROM sessions WHERE user_id=? AND token<>?')->execute([$u['id'], $t]);
+        send(['changed' => true]);
+        break;
+
     case 'me':
         if ($method !== 'GET') err('Method not allowed', 405);
         $u = authUser($pdo);

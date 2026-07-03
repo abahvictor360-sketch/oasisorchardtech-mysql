@@ -17,6 +17,7 @@ import {
   BadgeDollarSign,
   BellRing,
   Tag,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -33,6 +34,7 @@ const navItems = [
   { label: 'Support',   icon: MessageSquare,    to: '/admin/support' },
   { label: 'Notifications', icon: BellRing,       to: '/admin/notifications' },
   { label: 'Content',   icon: FileEdit,         to: '/admin/content' },
+  { label: 'Account',   icon: KeyRound,         to: '/admin/account' },
 ];
 
 export default function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {

@@ -36,6 +36,10 @@ export const auth = {
     return { error: null };
   },
 
+  changePassword(current, newPassword) {
+    return req('/auth/change-password', { method: 'POST', body: { current, new: newPassword } });
+  },
+
   async getSession() {
     const token = localStorage.getItem('oasis_token');
     if (!token) return { data: { session: null }, error: null };
