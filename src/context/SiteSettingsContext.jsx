@@ -8,6 +8,7 @@ export const DEFAULT_BRAND = {
   logoType: 'icon',   // 'icon' | 'image'
   logoUrl: '',
   logoIcon: 'wifi',   // 'wifi' | 'phone'
+  faviconUrl: '',     // browser tab icon; falls back to logoUrl, then /favicon.svg
 };
 
 export const DEFAULT_NAV = [
@@ -95,6 +96,19 @@ export function SiteSettingsProvider({ children }) {
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
+
+  // Keep the browser tab icon in sync with brand settings
+  useEffect(() => {
+    const href = brand.faviconUrl || brand.logoUrl || '/favicon.svg';
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = href.endsWith('.svg') ? 'image/svg+xml' : '';
+    link.href = href;
+  }, [brand.faviconUrl, brand.logoUrl]);
 
   return (
     <SiteSettingsContext.Provider value={{ brand, nav, footer, loaded, reload }}>

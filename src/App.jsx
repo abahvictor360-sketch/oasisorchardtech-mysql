@@ -12,6 +12,7 @@ import Footer from './components/layout/Footer';
 import DashboardLayout from './components/layout/DashboardLayout';
 import AdminLayout from './components/layout/AdminLayout';
 import WhatsAppChat from './components/layout/WhatsAppChat';
+import ScrollToTop from './components/layout/ScrollToTop';
 
 // ── Lazy page imports ──────────────────────────────────────────
 // Public pages
@@ -96,6 +97,7 @@ function App() {
       <SiteSettingsProvider>
       <VoipProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <ToastContainer />
         <Suspense fallback={<PageLoader />}>
           <Routes>

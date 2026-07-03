@@ -770,6 +770,26 @@ function BrandingManager() {
         </div>
       )}
 
+      {/* Favicon */}
+      <div className="space-y-2">
+        <div className="flex items-end gap-3">
+          <div className="flex-1">
+            <Field label="Favicon URL (browser tab icon)" value={form.faviconUrl || ''} onChange={v => set({ faviconUrl: v })} />
+          </div>
+          {(form.faviconUrl || form.logoUrl) && (
+            <img
+              src={form.faviconUrl || form.logoUrl}
+              alt="favicon preview"
+              className="w-8 h-8 object-contain border border-gray-200 rounded-lg p-1 bg-white"
+              onError={e => { e.target.style.display = 'none'; }}
+            />
+          )}
+        </div>
+        <p className="text-xs text-gray-400">
+          Square image works best (32×32 or 64×64 PNG/SVG). Leave empty to use the logo image above; if both are empty the default icon is used.
+        </p>
+      </div>
+
       {/* Live preview */}
       <div className="p-4 bg-[#0a1628] rounded-xl">
         <p className="text-xs text-gray-400 mb-3">Navbar preview:</p>
