@@ -1,12 +1,20 @@
 <?php
-// ── Database credentials — fill these in on Hostinger ────────
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'your_database_name');   // e.g. u123456789_oasis
-define('DB_USER', 'your_database_user');   // e.g. u123456789_admin
-define('DB_PASS', 'your_database_password');
+// ── Credentials loader ─────────────────────────────────────────
+// Real credentials live in oasis-config.php ONE LEVEL ABOVE
+// public_html (e.g. /home/u123456789/domains/yourdomain.com/oasis-config.php).
+// Git deploys only touch public_html, so that file survives every redeploy.
+$secretFile = dirname(__DIR__, 2) . '/oasis-config.php';
+if (is_file($secretFile)) require $secretFile;
 
-// ── CORS — set to your actual domain in production ───────────
-$allowed = ['http://localhost:5173', 'https://yourdomain.com'];
+// Fallbacks for local development (no secrets committed here)
+if (!defined('DB_HOST'))  define('DB_HOST', 'localhost');
+if (!defined('DB_NAME'))  define('DB_NAME', '');
+if (!defined('DB_USER'))  define('DB_USER', '');
+if (!defined('DB_PASS'))  define('DB_PASS', '');
+if (!defined('SITE_URL')) define('SITE_URL', 'https://yourdomain.com');
+
+// ── CORS ───────────────────────────────────────────────────────
+$allowed = ['http://localhost:5173', SITE_URL];
 $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowed) || $origin === '') {
     header('Access-Control-Allow-Origin: ' . ($origin ?: '*'));
@@ -23,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// ── Database connection ───────────────────────────────────────
+// ── Database connection ────────────────────────────────────────
 try {
     $pdo = new PDO(
         'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',

@@ -31,9 +31,9 @@ jobs:
         run: |
           mkdir -p deploy/api
           cp -r dist/. deploy/
-          cp api/index.php api/.htaccess deploy/api/
-          # NOTE: api/config.php is intentionally NOT included —
-          # the copy on the server (with real DB credentials) stays untouched.
+          cp api/index.php api/.htaccess api/config.php deploy/api/
+          # config.php contains NO secrets — it loads credentials from
+          # oasis-config.php which lives OUTSIDE public_html on the server.
 
       - name: Push to hostinger-deploy branch
         run: |

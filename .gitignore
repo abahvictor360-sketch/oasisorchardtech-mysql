@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Private server config — NEVER commit (contains DB password)
+oasis-config.php
+
 # Logs
 logs
 *.log
