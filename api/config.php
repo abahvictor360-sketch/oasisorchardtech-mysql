@@ -4,9 +4,10 @@
 // Git deploys (which wipe public_html) never touch it.
 // The loader searches every parent folder up to the account root,
 // so the file works no matter which level above public_html it's in.
-for ($lvl = 2; $lvl <= 5; $lvl++) {
+$__configFoundAt = null;
+for ($lvl = 1; $lvl <= 5; $lvl++) {
     $candidate = dirname(__DIR__, $lvl) . '/oasis-config.php';
-    if (is_file($candidate)) { require $candidate; break; }
+    if (is_file($candidate)) { require $candidate; $__configFoundAt = $lvl; break; }
 }
 
 // Fallbacks for local development (no secrets committed here)
@@ -49,7 +50,18 @@ try {
     // Never leak connection details (host, user, password hints) to the client
     error_log('DB connection failed: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Service temporarily unavailable']);
+    // /api/health gets diagnostics (no secrets) so setup problems are visible
+    if (strpos($_SERVER['REQUEST_URI'] ?? '', '/api/health') !== false) {
+        echo json_encode([
+            'status'      => 'error',
+            'db'          => 'connection failed',
+            'config_file' => $__configFoundAt !== null
+                ? 'found (' . $__configFoundAt . ' level(s) above the api folder)'
+                : 'MISSING — upload oasis-config.php one level above public_html',
+        ]);
+    } else {
+        echo json_encode(['error' => 'Service temporarily unavailable']);
+    }
     exit;
 }
 

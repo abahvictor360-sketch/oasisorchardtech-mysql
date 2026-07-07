@@ -302,6 +302,17 @@ $r2 = $segs[2] ?? null;
 // ── Routes ────────────────────────────────────────────────────
 switch ($r0) {
 
+// ═══ HEALTH ═══════════════════════════════════════════════════════
+case 'health':
+    send([
+        'status'      => 'ok',
+        'db'          => 'connected',
+        'config_file' => isset($__configFoundAt) && $__configFoundAt !== null
+            ? 'found (' . $__configFoundAt . ' level(s) above the api folder)'
+            : 'using fallback values',
+    ]);
+    break;
+
 // ═══ AUTH ═══════════════════════════════════════════════════════
 case 'auth':
     switch ($r1) {
