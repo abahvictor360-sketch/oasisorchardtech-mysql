@@ -23,6 +23,8 @@ const Pricing     = lazy(() => import('./pages/public/Pricing'));
 const Support     = lazy(() => import('./pages/public/Support'));
 const Login       = lazy(() => import('./pages/public/Login'));
 const Signup      = lazy(() => import('./pages/public/Signup'));
+const Terms       = lazy(() => import('./pages/public/Terms'));
+const Privacy     = lazy(() => import('./pages/public/Privacy'));
 const CustomPage  = lazy(() => import('./pages/public/CustomPage'));
 
 // Shop pages
@@ -109,6 +111,8 @@ function App() {
             <Route path="/support" element={<PublicLayout><Support /></PublicLayout>} />
             <Route path="/login"   element={<PublicLayout><Login /></PublicLayout>} />
             <Route path="/signup"  element={<PublicLayout><Signup /></PublicLayout>} />
+            <Route path="/terms"   element={<PublicLayout><Terms /></PublicLayout>} />
+            <Route path="/privacy" element={<PublicLayout><Privacy /></PublicLayout>} />
             <Route path="/p/:slug" element={<PublicLayout><CustomPage /></PublicLayout>} />
 
             {/* Shop routes */}
