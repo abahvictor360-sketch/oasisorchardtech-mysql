@@ -5,17 +5,19 @@ import { products as localProducts } from '../data/products';
 const ProductsContext = createContext(null);
 
 function mapFromDB(p) {
+  // MySQL returns DECIMAL columns as strings ("140.00") — coerce to
+  // numbers or every .toFixed()/comparison downstream breaks.
   return {
     id: p.id,
     name: p.name,
     sku: p.sku,
     category: p.category,
-    originalPrice: p.original_price ?? p.price,
-    price: p.price,
+    originalPrice: parseFloat(p.original_price ?? p.price) || 0,
+    price: parseFloat(p.price) || 0,
     onSale: p.on_sale ?? false,
-    stock: p.stock ?? 0,
-    rating: p.rating ?? 0,
-    reviews: p.review_count ?? 0,
+    stock: parseInt(p.stock) || 0,
+    rating: parseFloat(p.rating) || 0,
+    reviews: parseInt(p.review_count) || 0,
     image: p.image_url ?? '',
     badge: p.badge ?? '',
     shortDesc: p.short_desc ?? '',

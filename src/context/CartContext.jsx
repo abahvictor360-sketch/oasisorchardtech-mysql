@@ -10,10 +10,21 @@ const COUPONS = {
   'OASIS10': { type: 'percent', value: 10, label: '10% off' }
 };
 
+// Coerce numeric fields — items saved while the API returned DECIMAL
+// strings ("140.00") would otherwise crash .toFixed() on the cart page.
+function normalizeItem(item) {
+  return {
+    ...item,
+    price: parseFloat(item.price) || 0,
+    quantity: parseInt(item.quantity) || 1,
+    stock: parseInt(item.stock) || 0,
+  };
+}
+
 function loadCart() {
   try {
     const stored = localStorage.getItem('oasis_cart');
-    return stored ? JSON.parse(stored) : [];
+    return stored ? JSON.parse(stored).map(normalizeItem) : [];
   } catch {
     return [];
   }
@@ -38,7 +49,7 @@ export function CartProvider({ children }) {
             : item
         );
       }
-      return [...prev, { ...product, quantity }];
+      return [...prev, normalizeItem({ ...product, quantity })];
     });
   };
 

@@ -534,6 +534,17 @@ case 'products':
 case 'content':
     $key = $r1;
     if (!$key) {
+        // GET /api/content?keys=a,b,c — fetch many keys in ONE request (public)
+        if ($method === 'GET' && isset($_GET['keys'])) {
+            $keys = array_values(array_filter(array_map('trim', explode(',', $_GET['keys']))));
+            if (count($keys) === 0 || count($keys) > 50) send((object)[]);
+            $ph = implode(',', array_fill(0, count($keys), '?'));
+            $s = $pdo->prepare("SELECT section_key, content FROM page_content WHERE section_key IN ($ph)");
+            $s->execute($keys);
+            $map = [];
+            foreach ($s->fetchAll() as $r) $map[$r['section_key']] = json_decode($r['content'], true);
+            send($map);
+        }
         // GET /api/content?prefix=custom_page_  — list rows by prefix (admin)
         if ($method === 'GET' && isset($_GET['prefix'])) {
             authUser($pdo, true);

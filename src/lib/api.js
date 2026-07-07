@@ -87,6 +87,7 @@ export const products = {
 // ── Content / Settings ────────────────────────────────────────
 export const content = {
   get:          (key)        => req(`/content/${key}`),
+  getMany:      (keys)       => req(`/content?keys=${encodeURIComponent(keys.join(','))}`),
   save:         (key, value) => req(`/content/${key}`, { method: 'PUT', body: { content: value } }),
   listByPrefix: (prefix)     => req(`/content?prefix=${encodeURIComponent(prefix)}`),
   remove:       (key)        => req(`/content/${key}`, { method: 'DELETE' }),

@@ -63,15 +63,6 @@ export const DEFAULT_FOOTER = {
 // ── Context ───────────────────────────────────────────────────
 const SiteSettingsContext = createContext(null);
 
-async function fetchKey(key, fallback) {
-  try {
-    const { data } = await contentApi.get(key);
-    return data ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export async function saveKey(key, value) {
   const { error } = await contentApi.save(key, value);
   if (error) throw new Error(error.message);
@@ -84,14 +75,17 @@ export function SiteSettingsProvider({ children }) {
   const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
-    const [b, n, f] = await Promise.all([
-      fetchKey('site_brand',  DEFAULT_BRAND),
-      fetchKey('site_nav',    DEFAULT_NAV),
-      fetchKey('site_footer', DEFAULT_FOOTER),
-    ]);
-    setBrand(b);
-    setNav(n);
-    setFooter(f);
+    // One batched request instead of three round trips
+    try {
+      const { data } = await contentApi.getMany(['site_brand', 'site_nav', 'site_footer']);
+      setBrand(data?.site_brand   ?? DEFAULT_BRAND);
+      setNav(data?.site_nav       ?? DEFAULT_NAV);
+      setFooter(data?.site_footer ?? DEFAULT_FOOTER);
+    } catch {
+      setBrand(DEFAULT_BRAND);
+      setNav(DEFAULT_NAV);
+      setFooter(DEFAULT_FOOTER);
+    }
     setLoaded(true);
   }, []);
 

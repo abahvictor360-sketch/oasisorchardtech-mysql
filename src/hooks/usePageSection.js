@@ -11,14 +11,16 @@ export function usePageSection(keys, defaults) {
   const [data, setData] = useState(defaults);
 
   useEffect(() => {
-    Promise.all(keyList.map(k => contentApi.get(k)))
-      .then(results => {
+    // One batched request for all keys instead of a round trip per key
+    contentApi.getMany(keyList)
+      .then(({ data: map }) => {
+        if (!map || typeof map !== 'object') return;
         if (isArray) {
-          const map = {};
-          keyList.forEach((k, i) => { if (results[i].data != null) map[k] = results[i].data; });
-          if (Object.keys(map).length > 0) setData(prev => ({ ...prev, ...map }));
+          const found = {};
+          keyList.forEach(k => { if (map[k] != null) found[k] = map[k]; });
+          if (Object.keys(found).length > 0) setData(prev => ({ ...prev, ...found }));
         } else {
-          if (results[0]?.data != null) setData(results[0].data);
+          if (map[keyList[0]] != null) setData(map[keyList[0]]);
         }
       })
       .catch(() => {/* stay with defaults */});
