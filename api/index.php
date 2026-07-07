@@ -897,18 +897,13 @@ case 'orders':
 
             if ($total <= 0 || empty($items)) err('Invalid order', 400);
 
-            // Wallet payment: verify sufficient balance BEFORE creating the order
-            if ($pm === 'wallet') {
-                $bs = $pdo->prepare('SELECT wallet_balance FROM profiles WHERE id=?');
-                $bs->execute([$u['id']]);
-                $bal = (float)($bs->fetch()['wallet_balance'] ?? 0);
-                if ($bal < $total) err('Insufficient wallet balance', 400);
-            }
+            // Only real payment gateways are accepted (wallet/pay-later disabled)
+            if (!in_array($pm, ['stripe', 'paypal'], true)) err('Invalid payment method', 400);
 
             $pdo->prepare("INSERT INTO orders (id,user_id,payment_method,payment_status,stripe_intent_id,subtotal,total,shipping_name,shipping_email,shipping_phone,shipping_street,shipping_city,shipping_state,shipping_zip,shipping_country) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([
                     $orderId, $u['id'], $pm,
-                    $pm === 'wallet' ? 'paid' : 'pending',
+                    'pending',
                     $intentId,
                     $subtotal, $total,
                     $shipping['fullName'] ?? '', $shipping['email'] ?? '', $shipping['phone'] ?? '',
@@ -928,14 +923,6 @@ case 'orders':
                     (float)($item['price'] ?? 0),
                     (float)(($item['price'] ?? 0) * ($item['quantity'] ?? 1)),
                 ]);
-            }
-
-            // Wallet payment: deduct balance
-            if ($pm === 'wallet') {
-                $pdo->prepare("UPDATE profiles SET wallet_balance = wallet_balance - ? WHERE id=?")->execute([$total, $u['id']]);
-                $pdo->prepare("INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) SELECT ?,?,?, 'debit', wallet_balance FROM profiles WHERE id=?")->execute([$u['id'], 'Order ' . $orderId, $total, $u['id']]);
-                $pdo->prepare("UPDATE orders SET status='processing' WHERE id=?")->execute([$orderId]);
-                $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,amount,status) VALUES (?,?,?,?)")->execute([$orderId,'wallet',$total,'paid']);
             }
 
             $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");

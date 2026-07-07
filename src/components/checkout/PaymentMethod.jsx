@@ -1,8 +1,7 @@
 import { forwardRef, useImperativeHandle } from 'react';
 import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { PayPalButtons } from '@paypal/react-paypal-js';
-import { Wallet, Clock, AlertCircle, CheckCircle, CreditCard } from 'lucide-react';
-import { formatCurrency } from '../../utils/helpers';
+import { AlertCircle, CreditCard } from 'lucide-react';
 
 // ── Stripe card form (must be inside <Elements>) ──────────────
 export const StripeForm = forwardRef(function StripeForm({ onSuccess, onError }, ref) {
@@ -47,40 +46,6 @@ function PayPalSection({ onCreateOrder, onApprove, onError }) {
   );
 }
 
-// ── Wallet section ────────────────────────────────────────────
-function WalletSection({ walletBalance, orderTotal }) {
-  const ok = walletBalance >= orderTotal;
-  return (
-    <div className="pt-2">
-      <div className={['rounded-xl p-5 border-2', ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'].join(' ')}>
-        <div className="flex items-center gap-3 mb-3">
-          <Wallet size={22} className={ok ? 'text-green-500' : 'text-red-500'} />
-          <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Your Balance</p>
-            <p className={`text-2xl font-bold ${ok ? 'text-green-700' : 'text-red-600'}`}>
-              {formatCurrency(walletBalance)}
-            </p>
-          </div>
-        </div>
-        {ok ? (
-          <div className="flex items-center gap-2 text-green-700 text-sm">
-            <CheckCircle size={16} />
-            <span>Sufficient balance to complete this order.</span>
-          </div>
-        ) : (
-          <div className="flex items-start gap-2 text-red-600 text-sm">
-            <AlertCircle size={16} className="shrink-0 mt-0.5" />
-            <span>
-              Insufficient balance. You need{' '}
-              <strong>{formatCurrency(orderTotal - walletBalance)}</strong> more.
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Main PaymentMethod component ──────────────────────────────
 export default function PaymentMethod({
   method,
@@ -94,15 +59,25 @@ export default function PaymentMethod({
   onPayPalCreate,
   onPayPalApprove,
   onPayPalError,
-  walletBalance = 0,
-  orderTotal    = 0,
 }) {
   const tabs = [
     stripeEnabled  && { id: 'stripe',  label: 'Credit / Debit Card', icon: CreditCard },
     paypalEnabled  && { id: 'paypal',  label: 'PayPal',              icon: null },
-    { id: 'wallet', label: 'Wallet Balance', icon: Wallet },
-    { id: 'later',  label: 'Pay Later',      icon: Clock  },
   ].filter(Boolean);
+
+  if (tabs.length === 0) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex gap-3">
+        <AlertCircle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-amber-800 mb-1">Payments unavailable</p>
+          <p className="text-sm text-amber-700 leading-relaxed">
+            Online payment is not configured yet. Please contact us to complete your order.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -154,26 +129,6 @@ export default function PaymentMethod({
         />
       )}
 
-      {/* Wallet */}
-      {method === 'wallet' && (
-        <WalletSection walletBalance={walletBalance} orderTotal={orderTotal} />
-      )}
-
-      {/* Pay Later */}
-      {method === 'later' && (
-        <div className="pt-2">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex gap-3">
-            <Clock size={20} className="text-blue-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-blue-800 mb-1">Invoice on Delivery</p>
-              <p className="text-sm text-blue-700 leading-relaxed">
-                You will be invoiced within 24 hours. Payment due within 7 business days.
-                Available for verified business accounts only.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import { PayPalScriptProvider } from '@paypal/react-paypal-js';
 import { useCart } from '../../context/CartContext';
-import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { payments as paymentsApi, orders as ordersApi } from '../../lib/api';
 import CheckoutForm from '../../components/checkout/CheckoutForm';
@@ -28,7 +27,6 @@ function validateForm(data) {
 
 export default function CheckoutPage() {
   const navigate    = useNavigate();
-  const { user }    = useAuth();
   const { addToast } = useApp();
   const { cartItems, cartTotal, cartCount, clearCart } = useCart();
 
@@ -58,10 +56,10 @@ export default function CheckoutPage() {
     paymentsApi.config().then(({ data }) => {
       if (data) {
         setPayConfig(data);
-        // Default to first available method
+        // Default to first available gateway (wallet/pay-later removed)
         if (data.stripe_enabled) setPaymentMethod('stripe');
         else if (data.paypal_enabled) setPaymentMethod('paypal');
-        else setPaymentMethod('wallet');
+        else setPaymentMethod(null);
       }
     });
   }, []);
@@ -70,7 +68,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (paymentMethod === 'stripe' && payConfig?.stripe_enabled && !clientSecret && cartTotal > 0) {
       paymentsApi.createStripeIntent({ total: cartTotal }).then(({ data, error }) => {
-        if (error) { addToast('Could not load payment form. Try PayPal or Wallet.', 'error'); return; }
+        if (error) { addToast('Could not load payment form. Try PayPal.', 'error'); return; }
         setClientSecret(data.clientSecret);
         setIntentId(data.intentId);
       });
@@ -98,7 +96,7 @@ export default function CheckoutPage() {
     ...extraFields,
   }), [cartItems, cartTotal, paymentMethod, formData]);
 
-  // ── Place order (Stripe + Wallet + Later) ─────────────────────
+  // ── Place order (Stripe — PayPal uses its own buttons) ────────
   const handlePlaceOrder = async () => {
     const errs = validateForm(formData);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
@@ -119,18 +117,6 @@ export default function CheckoutPage() {
 
         // 3. Mark paid
         await ordersApi.update(order.id, { payment_status: 'paid', status: 'processing' });
-        clearCart();
-        navigate('/order-success', { state: { orderId: order.id, total: cartTotal, itemCount: cartCount } });
-
-      } else if (paymentMethod === 'wallet') {
-        const { data: order, error } = await ordersApi.create(buildOrder());
-        if (error) throw new Error(error.message);
-        clearCart();
-        navigate('/order-success', { state: { orderId: order.id, total: cartTotal, itemCount: cartCount } });
-
-      } else if (paymentMethod === 'later') {
-        const { data: order, error } = await ordersApi.create(buildOrder());
-        if (error) throw new Error(error.message);
         clearCart();
         navigate('/order-success', { state: { orderId: order.id, total: cartTotal, itemCount: cartCount } });
       }
@@ -171,10 +157,8 @@ export default function CheckoutPage() {
     },
   }), [clientSecret]);
 
-  // ── Wallet balance from user profile ─────────────────────────
-  const walletBalance = (user?.walletBalance ?? 0);
-
-  const showPlaceOrderBtn = paymentMethod !== 'paypal';
+  // Place Order button only applies to Stripe (PayPal has its own buttons)
+  const showPlaceOrderBtn = paymentMethod === 'stripe';
 
   // ── Render ────────────────────────────────────────────────────
   const paymentPanel = (
@@ -190,8 +174,6 @@ export default function CheckoutPage() {
       onPayPalCreate={handlePayPalCreate}
       onPayPalApprove={handlePayPalApprove}
       onPayPalError={(msg) => addToast(msg, 'error')}
-      walletBalance={walletBalance}
-      orderTotal={cartTotal}
     />
   );
 
@@ -259,7 +241,7 @@ export default function CheckoutPage() {
               {showPlaceOrderBtn && (
                 <button
                   onClick={handlePlaceOrder}
-                  disabled={placing || (paymentMethod === 'wallet' && walletBalance < cartTotal)}
+                  disabled={placing}
                   className="w-full flex items-center justify-center gap-2 bg-[#1bb0ce] hover:bg-[#159bb8] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-colors text-base shadow-sm"
                 >
                   {placing ? <><Spinner size="sm" color="white" />Processing…</> : <><Lock size={18} />Place Order</>}
