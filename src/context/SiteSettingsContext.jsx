@@ -54,7 +54,7 @@ export const DEFAULT_FOOTER = {
   contact: {
     phone: '+1 (902) 593-4442',
     email: 'support@oasisorchard.com',
-    address: '1505 Barrington Street, Suite 200\nHalifax, NS B3J 3K5, Canada',
+    address: '61 Rue Bastarache\nDieppe NB E1A 6Y6, Canada',
   },
   copyright: 'Oasis Orchard Technologies. All rights reserved.',
   payments: ['Visa', 'MC', 'Amex', 'PayPal'],

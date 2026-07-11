@@ -49,8 +49,8 @@ function InvoiceModal({ isOpen, onClose, order, user }) {
           </div>
           <div className="text-right">
             <p className="font-bold text-[#0a1628]">Oasis Orchard Technologies</p>
-            <p className="text-gray-500">123 Tech Avenue</p>
-            <p className="text-gray-500">Lagos, Nigeria</p>
+            <p className="text-gray-500">61 Rue Bastarache</p>
+            <p className="text-gray-500">Dieppe NB E1A 6Y6, Canada</p>
             <p className="text-gray-500">support@oasisorchard.com</p>
           </div>
         </div>
