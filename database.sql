@@ -6,9 +6,9 @@
 --   1. In Hostinger hPanel → phpMyAdmin, select your database
 --   2. Import this single file — done.
 --
--- ADMIN LOGIN (change the password after first login!):
---   Email    : admin@oasisorchard.com
---   Password : Admin@1234
+-- ADMIN LOGIN:
+--   Email    : info@oasisorchardtech.com
+--   Password : (set by owner — bcrypt hash below)
 -- ================================================================
 
 SET NAMES utf8mb4;
@@ -244,11 +244,11 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- SEED DATA
 -- ================================================================
 
--- ── Admin account (email: admin@oasisorchard.com / pass: Admin@1234) ──
+-- ── Admin account ──
 INSERT INTO users (id, email, password_hash, role) VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'admin@oasisorchard.com',
-  '$2b$10$n4IHmMRFGS/nD/yfxHxI4.ud8ZLDgidVAbBB9kvhkFtqfw5dyYhfu',
+  'info@oasisorchardtech.com',
+  '$2b$10$rviEai3bko2g34BAa5dTaOE8cKVaJkSad6bjAFMtJwEX0CpYIuIFW',
   'admin'
 )
 ON DUPLICATE KEY UPDATE
@@ -257,7 +257,7 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO profiles (id, email, name, plan, role, status) VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'admin@oasisorchard.com',
+  'info@oasisorchardtech.com',
   'Site Admin',
   'business',
   'admin',
