@@ -14,7 +14,7 @@ export default function OrderSummary() {
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col gap-4">
-      <h3 className="text-base font-bold text-[#0a1628]">Order Summary</h3>
+      <h3 className="font-display text-base text-[#0a1628]" style={{ fontWeight: 560 }}>Order Summary</h3>
 
       {/* Item list */}
       <div className="flex flex-col gap-3">
@@ -37,7 +37,7 @@ export default function OrderSummary() {
                 <p className="text-xs text-gray-400">Qty: {item.quantity}</p>
               </div>
               {/* Price */}
-              <span className="text-sm font-semibold text-[#0a1628] flex-shrink-0">
+              <span className="font-mono-num text-sm font-semibold text-[#0a1628] flex-shrink-0">
                 {formatCurrency(item.price * item.quantity)}
               </span>
             </div>
@@ -52,23 +52,23 @@ export default function OrderSummary() {
       <div className="flex flex-col gap-2 text-sm">
         <div className="flex justify-between text-gray-600">
           <span>Subtotal</span>
-          <span>{formatCurrency(cartSubtotal)}</span>
+          <span className="font-mono-num">{formatCurrency(cartSubtotal)}</span>
         </div>
         {discount > 0 && coupon && (
           <div className="flex justify-between text-green-600">
             <span>Discount ({coupon.code})</span>
-            <span>-{formatCurrency(discount)}</span>
+            <span className="font-mono-num">-{formatCurrency(discount)}</span>
           </div>
         )}
         <div className="flex justify-between text-gray-600">
           <span>Shipping</span>
-          <span className={shipping === 0 && cartSubtotal > 0 ? 'text-green-600' : ''}>
+          <span className={`font-mono-num ${shipping === 0 && cartSubtotal > 0 ? 'text-green-600' : ''}`}>
             {shipping === 0 ? (cartSubtotal === 0 ? formatCurrency(0) : 'FREE') : formatCurrency(shipping)}
           </span>
         </div>
         <div className="flex justify-between text-gray-600">
           <span>Tax (8%)</span>
-          <span>{formatCurrency(tax)}</span>
+          <span className="font-mono-num">{formatCurrency(tax)}</span>
         </div>
       </div>
 
@@ -78,7 +78,7 @@ export default function OrderSummary() {
       {/* Grand total */}
       <div className="flex justify-between items-center">
         <span className="font-bold text-[#0a1628]">Total</span>
-        <span className="text-lg font-bold text-[#0a1628]">{formatCurrency(cartTotal)}</span>
+        <span className="font-mono-num text-lg font-bold text-[#0a1628]">{formatCurrency(cartTotal)}</span>
       </div>
     </div>
   );

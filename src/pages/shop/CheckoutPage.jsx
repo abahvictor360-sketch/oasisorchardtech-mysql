@@ -178,7 +178,7 @@ export default function CheckoutPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
       <div className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-5">
           <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-2">
@@ -188,7 +188,7 @@ export default function CheckoutPage() {
             <ChevronRight size={14} />
             <span className="text-[#0a1628] font-medium">Checkout</span>
           </nav>
-          <h1 className="text-2xl font-bold text-[#0a1628] flex items-center gap-2">
+          <h1 className="font-display text-2xl text-[#0a1628] flex items-center gap-2" style={{ fontWeight: 560 }}>
             <Lock size={22} /> Checkout
           </h1>
         </div>
@@ -200,7 +200,7 @@ export default function CheckoutPage() {
           <div className="flex-1 min-w-0 flex flex-col gap-6">
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
               <h2 className="text-base font-bold text-[#0a1628] mb-5 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1bb0ce] text-white text-xs font-bold flex items-center justify-center">1</span>
+                <span className="font-mono-num w-6 h-6 rounded-full bg-[#1bb0ce] text-white text-xs font-bold flex items-center justify-center">1</span>
                 Contact &amp; Shipping
               </h2>
               <CheckoutForm formData={formData} onFormChange={setFormData} errors={errors} />
@@ -208,7 +208,7 @@ export default function CheckoutPage() {
 
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
               <h2 className="text-base font-bold text-[#0a1628] mb-5 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[#1bb0ce] text-white text-xs font-bold flex items-center justify-center">2</span>
+                <span className="font-mono-num w-6 h-6 rounded-full bg-[#1bb0ce] text-white text-xs font-bold flex items-center justify-center">2</span>
                 Payment Method
               </h2>
 

@@ -18,12 +18,12 @@ export default function PriceDisplay({
 
   return (
     <div className="flex flex-wrap items-baseline gap-2">
-      <span className={`text-[#0a1628] ${sizes.current}`}>
+      <span className={`font-mono-num text-[#0a1628] ${sizes.current}`}>
         {formatCurrency(price)}
       </span>
 
       {hasDiscount && (
-        <span className={`text-gray-400 line-through ${sizes.original}`}>
+        <span className={`font-mono-num text-gray-400 line-through ${sizes.original}`}>
           {formatCurrency(originalPrice)}
         </span>
       )}

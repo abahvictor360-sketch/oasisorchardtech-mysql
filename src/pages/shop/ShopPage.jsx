@@ -79,11 +79,12 @@ export default function ShopPage() {
         canonical="/shop"
         schema={productListSchema(products)}
       />
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
 
       {/* Hero Banner */}
-      <div className="bg-[#0a1628] py-12 px-4">
-        <div className="max-w-7xl mx-auto">
+      <div className="relative overflow-hidden py-12 px-4" style={{ background: '#0a1628' }}>
+        <div className="absolute -right-32 -top-32 w-80 h-80 rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, #1bb0ce 0%, transparent 70%)' }} />
+        <div className="relative max-w-7xl mx-auto">
           <nav className="flex items-center gap-1.5 text-sm text-gray-400 mb-4">
             <Link to="/" className="hover:text-[#1bb0ce] flex items-center gap-1 transition-colors">
               <Home size={14} /><span>Home</span>
@@ -91,8 +92,8 @@ export default function ShopPage() {
             <ChevronRight size={14} className="text-gray-600" />
             <span className="text-white font-medium">Shop</span>
           </nav>
-          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Shop Wireless Phones</h1>
-          <p className="text-gray-400 text-base max-w-xl">
+          <h1 className="font-display text-3xl sm:text-4xl text-white mb-2" style={{ fontWeight: 560 }}>Shop wireless phones</h1>
+          <p className="text-blue-100/70 text-base max-w-xl">
             Explore our full range of Grandstream wireless phones — crystal-clear HD audio,
             easy setup, and built to scale with your business.
           </p>

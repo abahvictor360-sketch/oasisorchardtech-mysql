@@ -116,7 +116,7 @@ export default function ProductDetail() {
         type="og:product"
         schema={productSchema(product)}
       />
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-6 flex-wrap">
@@ -189,7 +189,7 @@ export default function ProductDetail() {
             </div>
 
             {/* Product name */}
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#0a1628] leading-snug">
+            <h1 className="font-display text-2xl sm:text-3xl text-[#0a1628] leading-snug" style={{ fontWeight: 560 }}>
               {product.name}
             </h1>
 
@@ -204,11 +204,11 @@ export default function ProductDetail() {
             {/* Price */}
             <div className="flex flex-col gap-1">
               <div className="flex items-baseline gap-3 flex-wrap">
-                <span className="text-3xl font-bold text-[#0a1628]">
+                <span className="font-mono-num text-3xl font-bold text-[#0a1628]">
                   {formatCurrency(product.price)}
                 </span>
                 {hasDiscount && (
-                  <span className="text-lg text-gray-400 line-through">
+                  <span className="font-mono-num text-lg text-gray-400 line-through">
                     {formatCurrency(product.originalPrice)}
                   </span>
                 )}
@@ -275,7 +275,8 @@ export default function ProductDetail() {
               {TRUST_BADGES.map(({ icon: Icon, label }) => (
                 <div
                   key={label}
-                  className="flex items-center gap-2.5 bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100"
+                  className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 border border-gray-100"
+                  style={{ background: 'var(--paper)' }}
                 >
                   <Icon size={16} className="text-[#1bb0ce] flex-shrink-0" />
                   <span className="text-xs font-medium text-gray-600">{label}</span>
@@ -308,7 +309,7 @@ export default function ProductDetail() {
         {/* You May Also Like */}
         {relatedProducts.length > 0 && (
           <div>
-            <h2 className="text-xl font-bold text-[#0a1628] mb-6">You May Also Like</h2>
+            <h2 className="font-display text-xl text-[#0a1628] mb-6" style={{ fontWeight: 560 }}>You may also like</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {relatedProducts.map((p) => (
                 <ProductCard

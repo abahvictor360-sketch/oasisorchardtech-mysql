@@ -19,25 +19,25 @@ export default function CartSummary() {
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 flex flex-col gap-4 sticky top-6">
-      <h2 className="text-base font-bold text-[#0a1628]">Order Summary</h2>
+      <h2 className="font-display text-base text-[#0a1628]" style={{ fontWeight: 560 }}>Order Summary</h2>
 
       {/* Line items */}
       <div className="flex flex-col gap-2.5 text-sm">
         <div className="flex justify-between text-gray-600">
           <span>Subtotal</span>
-          <span className="font-medium text-[#0a1628]">{formatCurrency(cartSubtotal)}</span>
+          <span className="font-mono-num font-medium text-[#0a1628]">{formatCurrency(cartSubtotal)}</span>
         </div>
 
         {discount > 0 && coupon && (
           <div className="flex justify-between text-green-600">
             <span>Discount ({coupon.code})</span>
-            <span className="font-medium">-{formatCurrency(discount)}</span>
+            <span className="font-mono-num font-medium">-{formatCurrency(discount)}</span>
           </div>
         )}
 
         <div className="flex justify-between text-gray-600">
           <span>Shipping</span>
-          <span className={`font-medium ${shipping === 0 ? 'text-green-600' : 'text-[#0a1628]'}`}>
+          <span className={`font-mono-num font-medium ${shipping === 0 ? 'text-green-600' : 'text-[#0a1628]'}`}>
             {shipping === 0 ? (cartSubtotal === 0 ? formatCurrency(0) : 'FREE') : formatCurrency(shipping)}
           </span>
         </div>
@@ -50,7 +50,7 @@ export default function CartSummary() {
 
         <div className="flex justify-between text-gray-600">
           <span>Tax (8%)</span>
-          <span className="font-medium text-[#0a1628]">{formatCurrency(tax)}</span>
+          <span className="font-mono-num font-medium text-[#0a1628]">{formatCurrency(tax)}</span>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ export default function CartSummary() {
       {/* Total */}
       <div className="flex justify-between items-center">
         <span className="font-bold text-[#0a1628]">Total</span>
-        <span className="text-xl font-bold text-[#0a1628]">{formatCurrency(cartTotal)}</span>
+        <span className="font-mono-num text-xl font-bold text-[#0a1628]">{formatCurrency(cartTotal)}</span>
       </div>
 
       {/* Checkout button */}

@@ -84,8 +84,7 @@ export default function VoIP() {
           <Info size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold mb-1">Running in Demo Mode</p>
-            <p>Calls are simulated. To enable real phone calls, your admin needs to connect a call provider
-               (Twilio, Telnyx, or Vonage) in Admin settings.</p>
+            <p>Calls are simulated. To enable real phone calls, your admin needs to connect a call provider in Admin settings.</p>
           </div>
         </div>
       )}

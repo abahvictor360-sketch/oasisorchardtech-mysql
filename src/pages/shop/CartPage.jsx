@@ -13,7 +13,7 @@ export default function CartPage() {
   const isEmpty = cartItems.length === 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--paper)' }}>
       {/* Page header */}
       <div className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-5">
@@ -31,7 +31,7 @@ export default function CartPage() {
             <span className="text-[#0a1628] font-medium">Shopping Cart</span>
           </nav>
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <h1 className="text-2xl font-bold text-[#0a1628] flex items-center gap-2">
+            <h1 className="font-display text-2xl text-[#0a1628] flex items-center gap-2" style={{ fontWeight: 560 }}>
               <ShoppingCart size={24} />
               Shopping Cart
               {cartCount > 0 && (
@@ -128,10 +128,10 @@ export default function CartPage() {
                           {item.name}
                         </Link>
                         <p className="text-xs text-gray-400 mt-0.5">SKU: {item.sku}</p>
-                        <p className="text-sm font-bold text-[#0a1628] mt-1">
+                        <p className="font-mono-num text-sm font-bold text-[#0a1628] mt-1">
                           ${(item.price * item.quantity).toFixed(2)}
                         </p>
-                        <p className="text-xs text-gray-400">${item.price.toFixed(2)} each</p>
+                        <p className="font-mono-num text-xs text-gray-400">${item.price.toFixed(2)} each</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
