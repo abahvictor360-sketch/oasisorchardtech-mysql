@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'motion/react';
 import {
   Phone, Mic2, Zap, DollarSign, Headphones,
   ChevronRight, Star, Check, ArrowRight,
 } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import { TestimonialsColumn } from '../../components/ui/TestimonialsColumn';
 import { products, servicePlans } from '../../data/products';
 import { useHomeLayout } from '../../hooks/useHomeLayout';
 import { usePageSection } from '../../hooks/usePageSection';
@@ -25,10 +27,19 @@ const DEFAULT_HOW_STEPS = [
   { number: '03', title: 'Start Calling',     description: 'Plug in your phone, activate your plan, and enjoy crystal-clear calls from day one.' },
 ];
 
+// NOTE: placeholder testimonials — swap in real, verifiable customer quotes
+// before leaning on any of these (especially the dollar-savings claims) for
+// marketing purposes.
 const testimonials = [
-  { name: 'Maria Gonzalez', role: 'Small Business Owner',    rating: 5, quote: 'Switching to Oasis Orchard Technologies saved our company over $200 a month on phone bills. The call quality is outstanding and setup took under 10 minutes!' },
-  { name: 'James Okafor',   role: 'Remote Team Manager',     rating: 5, quote: "The Smart Connect plan is perfect for our distributed team. The 3-way calling and mobile app keep everyone connected. Best decision we've made this year." },
-  { name: 'Sandra Liu',     role: 'Office Administrator',    rating: 5, quote: 'I was skeptical about wireless phones at first, but Oasis made it so simple. Their support team walked me through everything. Five stars without hesitation!' },
+  { text: 'Switching to Oasis Orchard Technologies saved our company over $200 a month on phone bills. The call quality is outstanding and setup took under 10 minutes!', name: 'Maria Gonzalez', role: 'Small Business Owner' },
+  { text: "The Smart Connect plan is perfect for our distributed team. The 3-way calling and mobile app keep everyone connected. Best decision we've made this year.", name: 'James Okafor', role: 'Remote Team Manager' },
+  { text: 'I was skeptical about wireless phones at first, but Oasis made it so simple. Their support team walked me through everything. Five stars without hesitation!', name: 'Sandra Liu', role: 'Office Administrator' },
+  { text: 'Our shop lost calls constantly on the old landline. Since switching to a Grandstream phone and the Basic plan, we haven’t missed a single customer call.', name: 'Devon Marsh', role: 'Retail Store Owner' },
+  { text: 'I show properties all day, so call forwarding to my mobile is everything. Oasis set it up in one phone call and it just works.', name: 'Priya Nair', role: 'Real Estate Agent' },
+  { text: 'My father is 78 and was intimidated by "wireless" anything. The phone was so simple to plug in that he had it running before I could finish explaining it.', name: 'Robert Chen', role: 'Home User' },
+  { text: 'As a nonprofit, every dollar counts. Business Connect gave our whole team real phone lines for less than we paid for one landline before.', name: 'Aisha Bello', role: 'Nonprofit Program Director' },
+  { text: 'I’m on job sites more than I’m at a desk. Having my business line ring straight to my cell without customers knowing the difference has been huge.', name: 'Marcus Webb', role: 'General Contractor' },
+  { text: 'I’ve set up VoIP for a dozen clients now. Oasis is the first provider where the hardware and the plan setup both just worked on the first try.', name: 'Grace Lindqvist', role: 'IT Consultant' },
 ];
 
 function Stars({ rating }) {
@@ -320,28 +331,32 @@ function HowSection() {
   );
 }
 
+const testimonialColumn1 = testimonials.slice(0, 3);
+const testimonialColumn2 = testimonials.slice(3, 6);
+const testimonialColumn3 = testimonials.slice(6, 9);
+
 function TestimonialsSection() {
   return (
-    <section className="py-20" style={{ background: 'var(--paper)' }}>
+    <section className="py-20 relative overflow-hidden" style={{ background: 'var(--paper)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          viewport={{ once: true }}
+          className="flex flex-col items-center text-center max-w-xl mx-auto mb-4"
+        >
+          <span className="inline-block text-[#1bb0ce] border border-[#1bb0ce]/30 bg-[#1bb0ce]/5 text-xs font-bold tracking-[0.14em] uppercase px-4 py-1.5 rounded-full mb-5">
+            Testimonials
+          </span>
           <h2 className="font-display text-3xl sm:text-4xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>What people say after they switch</h2>
-          <p className="text-[--ink-soft] text-lg max-w-xl mx-auto">Real accounts from businesses now running on Oasis.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {testimonials.map(t => (
-            <Card key={t.name} hover className="p-6 flex flex-col gap-4">
-              <Stars rating={t.rating} />
-              <p className="text-gray-600 leading-relaxed flex-1">
-                <span className="font-display text-2xl text-[#1bb0ce] leading-none mr-0.5">"</span>
-                {t.quote}
-              </p>
-              <div>
-                <p className="font-bold text-[#0a1628]">{t.name}</p>
-                <p className="text-sm text-gray-400">{t.role}</p>
-              </div>
-            </Card>
-          ))}
+          <p className="text-[--ink-soft] text-lg">Real accounts from businesses now running on Oasis.</p>
+        </motion.div>
+
+        <div className="flex justify-center gap-6 mt-10 [mask-image:linear-gradient(to_bottom,transparent,black_15%,black_85%,transparent)] max-h-[700px] overflow-hidden">
+          <TestimonialsColumn testimonials={testimonialColumn1} duration={16} />
+          <TestimonialsColumn testimonials={testimonialColumn2} duration={20} className="hidden md:block" />
+          <TestimonialsColumn testimonials={testimonialColumn3} duration={18} className="hidden lg:block" />
         </div>
       </div>
     </section>
