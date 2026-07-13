@@ -36,6 +36,11 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://oasisorchardtech.com/shop/grwp820</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://oasisorchardtech.com/shop/grwp822</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -46,8 +51,28 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://oasisorchardtech.com/shop/grwp826</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://oasisorchardtech.com/shop/grgrp2602w</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://oasisorchardtech.com/support</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://oasisorchardtech.com/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://oasisorchardtech.com/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
 </urlset>
