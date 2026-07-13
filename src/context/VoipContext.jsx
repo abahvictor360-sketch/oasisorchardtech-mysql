@@ -2,28 +2,25 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef } f
 import { voip as voipApi } from '../lib/api';
 import { useAuth } from './AuthContext';
 
-// ── Plan minutes allocation per tier ──────────────────────────
 export const PLAN_MINUTES = {
   basic:    100,
   smart:    500,
   business: 2000,
 };
 
-// ── Call status enum ─────────────────────────────────────────
 export const CALL_STATUS = {
-  IDLE:     'idle',
-  DIALING:  'dialing',
-  RINGING:  'ringing',
-  CONNECTED:'connected',
-  ENDED:    'ended',
-  FAILED:   'failed',
-  INCOMING: 'incoming',
+  IDLE:      'idle',
+  DIALING:   'dialing',
+  RINGING:   'ringing',
+  CONNECTED: 'connected',
+  ENDED:     'ended',
+  FAILED:    'failed',
+  INCOMING:  'incoming',
 };
 
-// ── Default provider config (demo) ───────────────────────────
 const DEFAULT_PROVIDER = {
-  provider:      'demo',  // 'demo' | 'twilio' | 'telnyx' | 'vonage' | 'sip'
-  ratePerMinute: 0.014,   // $/min for overage
+  provider:      'demo',
+  ratePerMinute: 0.014,
   enabled:       true,
 };
 
@@ -32,33 +29,29 @@ const VoipContext = createContext(null);
 export function VoipProvider({ children }) {
   const { user, isAuthenticated } = useAuth();
 
-  // ── Account state ────────────────────────────────────────────
-  const [voipCredits,  setVoipCredits]  = useState(0);
-  const [phoneNumber,  setPhoneNumber]  = useState(null);
-  const [usedMinutes,  setUsedMinutes]  = useState(0);
-  const [callHistory,  setCallHistory]  = useState([]);
-  const [voipEnabled,  setVoipEnabled]  = useState(true);
+  // ── Account state ─────────────────────────────────────────────
+  const [voipCredits,    setVoipCredits]    = useState(0);
+  const [phoneNumber,    setPhoneNumber]    = useState(null);
+  const [usedMinutes,    setUsedMinutes]    = useState(0);
+  const [callHistory,    setCallHistory]    = useState([]);
+  const [voipEnabled,    setVoipEnabled]    = useState(true);
   const [providerConfig, setProviderConfig] = useState(DEFAULT_PROVIDER);
+  const [sipCreds,       setSipCreds]       = useState(null); // { sip_username, sip_password, sip_server }
+  const [jsSipRegistered, setJsSipRegistered] = useState(false);
 
-  // ── Call state ───────────────────────────────────────────────
+  // ── Call state ────────────────────────────────────────────────
   const [callStatus,   setCallStatus]   = useState(CALL_STATUS.IDLE);
   const [activeCall,   setActiveCall]   = useState(null);
   const [callDuration, setCallDuration] = useState(0);
 
-  const callTimerRef   = useRef(null);
-  const simTimerRef    = useRef([]);
-  const callStartRef   = useRef(null);
+  const callTimerRef    = useRef(null);
+  const simTimerRef     = useRef([]);
+  const callStartRef    = useRef(null);
   const activeCallIdRef = useRef(null);
+  const uaRef           = useRef(null);   // JsSIP UserAgent
+  const sessionRef      = useRef(null);   // active JsSIP RTCSession
 
-  // ── Load data on auth ────────────────────────────────────────
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    loadAccount();
-    loadSettings();
-    loadHistory();
-  }, [isAuthenticated, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Duration timer ───────────────────────────────────────────
+  // ── Duration timer ────────────────────────────────────────────
   useEffect(() => {
     if (callStatus === CALL_STATUS.CONNECTED) {
       if (!callStartRef.current) callStartRef.current = Date.now();
@@ -71,15 +64,81 @@ export function VoipProvider({ children }) {
     return () => clearInterval(callTimerRef.current);
   }, [callStatus]);
 
-  // ── DB helpers ───────────────────────────────────────────────
+  // ── Load data on auth ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    loadAccount();
+    loadSettings();
+    loadHistory();
+  }, [isAuthenticated, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Initialize JsSIP when provider is voipms ─────────────────
+  useEffect(() => {
+    if (providerConfig.provider !== 'voipms' || !sipCreds?.sip_username || !sipCreds?.sip_password) {
+      if (uaRef.current) { try { uaRef.current.stop(); } catch {} uaRef.current = null; }
+      return;
+    }
+
+    let ua;
+    import('jssip').then(JsSIP => {
+      // Suppress JsSIP debug logs
+      JsSIP.default.debug.disable('JsSIP:*');
+
+      const server = sipCreds.sip_server || 'webrtc.voip.ms';
+      const socket = new JsSIP.default.WebSocketInterface(`wss://${server}:443`);
+
+      ua = new JsSIP.default.UA({
+        sockets:        [socket],
+        uri:            `sip:${sipCreds.sip_username}@voip.ms`,
+        password:       sipCreds.sip_password,
+        display_name:   user?.name || sipCreds.sip_username,
+        session_timers: false,
+        register:       true,
+      });
+
+      ua.on('registered',           () => setJsSipRegistered(true));
+      ua.on('unregistered',         () => setJsSipRegistered(false));
+      ua.on('registrationFailed',   () => setJsSipRegistered(false));
+
+      // Handle incoming calls
+      ua.on('newRTCSession', ({ session, originator }) => {
+        if (originator === 'remote') {
+          sessionRef.current = session;
+          setCallStatus(CALL_STATUS.INCOMING);
+          setActiveCall({ direction: 'inbound', number: session.remote_identity?.uri?.user || 'Unknown', muted: false, onHold: false });
+
+          session.on('ended',  () => triggerHangUp());
+          session.on('failed', () => { setCallStatus(CALL_STATUS.FAILED); setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 2500); });
+        }
+      });
+
+      ua.start();
+      uaRef.current = ua;
+    }).catch(() => {});
+
+    return () => {
+      if (ua) { try { ua.stop(); } catch {} }
+      uaRef.current = null;
+      setJsSipRegistered(false);
+    };
+  }, [providerConfig.provider, sipCreds?.sip_username, sipCreds?.sip_password]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── DB helpers ────────────────────────────────────────────────
   async function loadAccount() {
     try {
       const { data } = await voipApi.getAccount();
       if (data) {
         setVoipCredits(parseFloat(data.voip_credits) ?? 0);
         setPhoneNumber(data.phone_number ?? null);
+        if (data.sip_username && data.sip_password) {
+          setSipCreds({
+            sip_username: data.sip_username,
+            sip_password: data.sip_password,
+            sip_server:   data.sip_server || 'webrtc.voip.ms',
+          });
+        }
       }
-    } catch { /* table may not exist yet */ }
+    } catch {}
   }
 
   async function loadSettings() {
@@ -89,15 +148,13 @@ export function VoipProvider({ children }) {
         if (data.provider_config) setProviderConfig({ ...DEFAULT_PROVIDER, ...data.provider_config });
         if (data.voip_enabled != null) setVoipEnabled(data.voip_enabled?.value !== false);
       }
-    } catch { /* use defaults */ }
+    } catch {}
   }
 
   async function loadHistory() {
     try {
       const { data } = await voipApi.getCalls();
       setCallHistory(data ?? []);
-
-      // Minutes used this billing month
       const monthStart = new Date();
       monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
       const monthCalls = (data ?? []).filter(
@@ -109,14 +166,23 @@ export function VoipProvider({ children }) {
     } catch {}
   }
 
-  // ── Derived values ───────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────
   const planMinutes          = PLAN_MINUTES[user?.plan] ?? PLAN_MINUTES.basic;
   const remainingPlanMinutes = Math.max(0, planMinutes - usedMinutes);
-  const providerReady        = providerConfig.provider !== 'demo' &&
-                               !!(providerConfig.accountSid || providerConfig.apiKey);
-  const hasCallCapacity      = remainingPlanMinutes > 0 || voipCredits > 0;
+  const isVoipMs             = providerConfig.provider === 'voipms';
+  const providerReady        = isVoipMs
+    ? jsSipRegistered
+    : (providerConfig.provider !== 'demo' && !!(providerConfig.accountSid || providerConfig.apiKey));
+  const hasCallCapacity = remainingPlanMinutes > 0 || voipCredits > 0;
 
-  // ── Make call ────────────────────────────────────────────────
+  // ── Shared hangup logic (used by both demo & JsSIP) ──────────
+  const triggerHangUp = useCallback(() => {
+    // This is called internally; the exposed hangUp does billing too
+    setCallStatus(CALL_STATUS.ENDED);
+    sessionRef.current = null;
+  }, []);
+
+  // ── Make call ─────────────────────────────────────────────────
   const makeCall = useCallback(async (rawNumber) => {
     if (callStatus !== CALL_STATUS.IDLE) return;
     if (!hasCallCapacity) return;
@@ -125,10 +191,10 @@ export function VoipProvider({ children }) {
     setCallStatus(CALL_STATUS.DIALING);
     setActiveCall({ direction: 'outbound', number, muted: false, onHold: false });
     setCallDuration(0);
-    callStartRef.current = null;
+    callStartRef.current  = null;
     activeCallIdRef.current = null;
 
-    // Log to DB
+    // Log to local DB
     try {
       const { data } = await voipApi.logCall({
         direction:   'outbound',
@@ -138,34 +204,43 @@ export function VoipProvider({ children }) {
       activeCallIdRef.current = data?.id ?? null;
     } catch {}
 
-    if (providerReady) {
-      // ─── LIVE PROVIDER HOOK ───────────────────────────────────
-      // Replace this block with your provider's SDK call.
-      //
-      // Example — Twilio Voice Web SDK:
-      //   1. Call Supabase Edge Function to get an access token:
-      //      const { data } = await supabase.functions.invoke('voip-token',
-      //        { body: { userId: user.id } });
-      //   2. Boot the Device:
-      //      const device = new Twilio.Device(data.token);
-      //      await device.register();
-      //   3. Connect:
-      //      const conn = await device.connect({ params: { To: number } });
-      //      conn.on('accept', () => setCallStatus(CALL_STATUS.CONNECTED));
-      //      conn.on('disconnect', () => hangUp());
-      //
-      // Example — Telnyx WebRTC:
-      //   const client = new TelnyxRTC({ login_token: data.token });
-      //   client.on('telnyx.ready', () => client.newCall({ destinationNumber: number }));
-      // ─────────────────────────────────────────────────────────
-      console.warn('[VoIP] Live provider selected but SDK not wired yet. Falling back to demo.');
+    // ── VoIP.ms via JsSIP ─────────────────────────────────────
+    if (isVoipMs && uaRef.current && jsSipRegistered) {
+      try {
+        const session = uaRef.current.call(`sip:${number}@voip.ms`, {
+          mediaConstraints:    { audio: true, video: false },
+          rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
+          sessionTimersExpires: 120,
+        });
+
+        sessionRef.current = session;
+        setCallStatus(CALL_STATUS.RINGING);
+
+        session.on('progress', () => setCallStatus(CALL_STATUS.RINGING));
+        session.on('confirmed', () => {
+          setCallStatus(CALL_STATUS.CONNECTED);
+          callStartRef.current = Date.now();
+          if (activeCallIdRef.current) {
+            voipApi.updateCall(activeCallIdRef.current, { status: 'answered' }).then(() => {});
+          }
+        });
+        session.on('ended',  () => hangUp());
+        session.on('failed', (e) => {
+          console.warn('[JsSIP] Call failed:', e.cause);
+          setCallStatus(CALL_STATUS.FAILED);
+          sessionRef.current = null;
+          setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 2500);
+        });
+      } catch (err) {
+        console.error('[JsSIP] makeCall error:', err);
+        setCallStatus(CALL_STATUS.FAILED);
+        setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 2500);
+      }
+      return;
     }
 
-    // Demo simulation (works without provider credentials)
-    const t1 = setTimeout(() => {
-      setCallStatus(CALL_STATUS.RINGING);
-    }, 1500);
-
+    // ── Demo simulation ───────────────────────────────────────
+    const t1 = setTimeout(() => setCallStatus(CALL_STATUS.RINGING), 1500);
     const t2 = setTimeout(() => {
       setCallStatus(CALL_STATUS.CONNECTED);
       callStartRef.current = Date.now();
@@ -173,14 +248,23 @@ export function VoipProvider({ children }) {
         voipApi.updateCall(activeCallIdRef.current, { status: 'answered' }).then(() => {});
       }
     }, 4000);
-
     simTimerRef.current = [t1, t2];
-  }, [callStatus, hasCallCapacity, phoneNumber, providerReady, user?.id]);
+  }, [callStatus, hasCallCapacity, phoneNumber, isVoipMs, jsSipRegistered]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Hang up ──────────────────────────────────────────────────
+  // ── Hang up ───────────────────────────────────────────────────
   const hangUp = useCallback(async () => {
     simTimerRef.current.forEach(clearTimeout);
     simTimerRef.current = [];
+
+    // Terminate JsSIP session if active
+    if (sessionRef.current) {
+      try {
+        if (['established','early'].includes(sessionRef.current.status_str ?? '')) {
+          sessionRef.current.terminate();
+        }
+      } catch {}
+      sessionRef.current = null;
+    }
 
     const duration    = callDuration;
     const callId      = activeCallIdRef.current;
@@ -188,11 +272,11 @@ export function VoipProvider({ children }) {
 
     setCallStatus(CALL_STATUS.ENDED);
 
-    // Billing: plan minutes first, then credits for overage
+    // Billing
     let costDollars = 0;
     if (wasAnswered && duration > 0) {
-      const callMins  = Math.ceil(duration / 60);
-      const rate      = providerConfig.ratePerMinute ?? 0.014;
+      const callMins = Math.ceil(duration / 60);
+      const rate     = providerConfig.ratePerMinute ?? 0.014;
       if (remainingPlanMinutes >= callMins) {
         setUsedMinutes(u => u + callMins);
       } else {
@@ -220,43 +304,62 @@ export function VoipProvider({ children }) {
       setCallStatus(CALL_STATUS.IDLE);
       setActiveCall(null);
       setCallDuration(0);
-      callStartRef.current  = null;
+      callStartRef.current    = null;
       activeCallIdRef.current = null;
       loadHistory();
     }, 2500);
-  }, [callStatus, callDuration, remainingPlanMinutes, voipCredits, providerConfig, user?.id]);
+  }, [callStatus, callDuration, remainingPlanMinutes, voipCredits, providerConfig, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Call controls ────────────────────────────────────────────
+  // ── Answer incoming call ──────────────────────────────────────
+  const answerCall = useCallback(() => {
+    if (callStatus !== CALL_STATUS.INCOMING || !sessionRef.current) return;
+    sessionRef.current.answer({ mediaConstraints: { audio: true, video: false } });
+    setCallStatus(CALL_STATUS.CONNECTED);
+    callStartRef.current = Date.now();
+  }, [callStatus]);
+
+  // ── In-call controls ──────────────────────────────────────────
   const toggleMute = useCallback(() => {
-    setActiveCall(p => p ? { ...p, muted: !p.muted } : p);
+    setActiveCall(p => {
+      if (!p) return p;
+      const next = !p.muted;
+      if (sessionRef.current) {
+        try { next ? sessionRef.current.mute() : sessionRef.current.unmute(); } catch {}
+      }
+      return { ...p, muted: next };
+    });
   }, []);
 
   const toggleHold = useCallback(() => {
-    setActiveCall(p => p ? { ...p, onHold: !p.onHold } : p);
+    setActiveCall(p => {
+      if (!p) return p;
+      const next = !p.onHold;
+      if (sessionRef.current) {
+        try { next ? sessionRef.current.hold() : sessionRef.current.unhold(); } catch {}
+      }
+      return { ...p, onHold: next };
+    });
   }, []);
 
-  // ── Top up VoIP credits ──────────────────────────────────────
+  // ── Top up ────────────────────────────────────────────────────
   const topUpVoipCredits = useCallback(async (amount) => {
     const newBal = +(voipCredits + amount).toFixed(2);
     setVoipCredits(newBal);
-    try {
-      await voipApi.patchAccount({ voip_credits: newBal });
-    } catch {}
-  }, [voipCredits, user?.id]);
+    try { await voipApi.patchAccount({ voip_credits: newBal }); } catch {}
+  }, [voipCredits]);
 
   return (
     <VoipContext.Provider value={{
-      // Account
       voipEnabled, voipCredits, phoneNumber,
       usedMinutes, planMinutes, remainingPlanMinutes,
       hasCallCapacity, callHistory, providerReady, providerConfig,
-      // Call
+      jsSipRegistered, isVoipMs,
       callStatus, activeCall, callDuration,
-      // Actions
-      makeCall, hangUp, toggleMute, toggleHold,
+      makeCall, hangUp, answerCall, toggleMute, toggleHold,
       topUpVoipCredits,
-      reloadHistory: loadHistory,
+      reloadHistory:  loadHistory,
       reloadSettings: loadSettings,
+      reloadAccount:  loadAccount,
     }}>
       {children}
     </VoipContext.Provider>

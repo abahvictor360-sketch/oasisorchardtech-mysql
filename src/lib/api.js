@@ -134,6 +134,10 @@ export const voip = {
   logCall:             (data)    => req('/voip/calls', { method: 'POST', body: data }),
   updateCall:          (id, d)   => req(`/voip/calls/${id}`, { method: 'PATCH', body: d }),
   getSettings:         ()        => req('/voip/settings'),
+  saveSettings:        (data)    => req('/voip/settings', { method: 'PUT', body: data }),
   getAdminAccounts:    ()        => req('/voip/accounts'),
   updateAdminAccount:  (id, d)   => req(`/voip/accounts/${id}`, { method: 'PATCH', body: d }),
+  // VoIP.ms integration
+  proxy:               (method, params = {}) => req(`/voipms?method=${method}&` + new URLSearchParams(params).toString()),
+  provision:           (userId)  => req('/provision', { method: 'POST', body: { user_id: userId } }),
 };

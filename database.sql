@@ -212,6 +212,9 @@ CREATE TABLE IF NOT EXISTS voip_accounts (
   phone_number VARCHAR(50)   DEFAULT NULL,
   voip_credits DECIMAL(10,4) NOT NULL DEFAULT 0,
   voip_enabled TINYINT(1)    NOT NULL DEFAULT 1,
+  sip_username VARCHAR(100)  DEFAULT NULL,
+  sip_password VARCHAR(100)  DEFAULT NULL,
+  sip_server   VARCHAR(100)  DEFAULT NULL,
   created_at   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

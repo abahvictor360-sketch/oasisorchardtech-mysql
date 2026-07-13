@@ -6,6 +6,7 @@ import {
   Clock, DollarSign, TrendingUp,
 } from 'lucide-react';
 import { voip as voipApi } from '../../lib/api';
+import { users as usersApi } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -29,6 +30,13 @@ const PROVIDERS = [
     label: 'Demo Mode (no real calls)',
     desc:  'Simulated calls only. No credentials required. Great for testing.',
     fields: [],
+  },
+  {
+    id:    'voipms',
+    label: 'VoIP.ms (Recommended)',
+    desc:  'Canadian VoIP provider. Get API credentials at voip.ms → API → Enable API.',
+    fields: [], // credentials saved separately to voip_settings for security
+    voipmsCredentials: true,
   },
   {
     id:    'twilio',
@@ -89,9 +97,8 @@ const STATUS_BADGE = {
   failed:    { variant: 'danger',  label: 'Failed'    },
 };
 
-// ── Save setting ─────────────────────────────────────────────
+// ── Save setting (provider_config → page_content via contentApi) ─
 async function saveSetting(key, value) {
-  // Store each setting key as a page_content entry prefixed with voip_
   const { content: contentApi } = await import('../../lib/api');
   const { error } = await contentApi.save(`voip_setting_${key}`, value);
   if (error) throw new Error(error.message);
@@ -100,20 +107,29 @@ async function saveSetting(key, value) {
 // ── Provider Setup ────────────────────────────────────────────
 function ProviderSetup() {
   const { addToast } = useApp();
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
-  const [creds,  setCreds]  = useState({});
-  const [saving, setSaving] = useState(false);
-  const [dirty,  setDirty]  = useState(false);
+  const [config,    setConfig]    = useState(DEFAULT_CONFIG);
+  const [creds,     setCreds]     = useState({});
+  const [vmsConfig, setVmsConfig] = useState({ api_user: '', api_pass: '', server: 'webrtc.voip.ms', did: '' });
+  const [saving,    setSaving]    = useState(false);
+  const [dirty,     setDirty]     = useState(false);
   const [showSecret, setShowSecret] = useState({});
 
   useEffect(() => {
     async function load() {
       try {
         const { data } = await voipApi.getSettings();
-        if (data && data.provider_config) {
-          const { provider, ratePerMinute, enabled, ...rest } = data.provider_config;
-          setConfig({ provider: provider ?? 'demo', ratePerMinute: ratePerMinute ?? 0.014, enabled: enabled ?? true });
-          setCreds(rest);
+        if (data) {
+          if (data.provider_config) {
+            const { provider, ratePerMinute, enabled, ...rest } = data.provider_config;
+            setConfig({ provider: provider ?? 'demo', ratePerMinute: ratePerMinute ?? 0.014, enabled: enabled ?? true });
+            setCreds(rest);
+          }
+          setVmsConfig(prev => ({
+            api_user: data.voipms_api_user ?? prev.api_user,
+            api_pass: data.voipms_api_pass ?? prev.api_pass,
+            server:   data.voipms_server   ?? prev.server,
+            did:      data.voipms_did      ?? prev.did,
+          }));
         }
       } catch {}
     }
@@ -127,14 +143,24 @@ function ProviderSetup() {
     try {
       await saveSetting('provider_config', { ...config, ...creds });
       await saveSetting('voip_enabled',    { value: config.enabled });
+      // Save VoIP.ms credentials to voip_settings (secure, server-side only)
+      if (config.provider === 'voipms') {
+        await voipApi.saveSettings({
+          voipms_api_user: vmsConfig.api_user,
+          voipms_api_pass: vmsConfig.api_pass,
+          voipms_server:   vmsConfig.server,
+          voipms_did:      vmsConfig.did,
+        });
+      }
       addToast('Phone call settings saved!', 'success');
       setDirty(false);
     } catch { addToast('Save failed.', 'error'); }
     finally { setSaving(false); }
   };
 
-  const setC = (k, v) => { setConfig(p => ({ ...p, [k]: v })); setDirty(true); };
-  const setCr = (k, v) => { setCreds(p => ({ ...p, [k]: v })); setDirty(true); };
+  const setC   = (k, v) => { setConfig(p => ({ ...p, [k]: v })); setDirty(true); };
+  const setCr  = (k, v) => { setCreds(p => ({ ...p, [k]: v })); setDirty(true); };
+  const setVms = (k, v) => { setVmsConfig(p => ({ ...p, [k]: v })); setDirty(true); };
 
   return (
     <div className="space-y-6">
@@ -186,7 +212,46 @@ function ProviderSetup() {
         </div>
 
         {/* Credential fields */}
-        {providerDef.fields.length > 0 ? (
+        {config.provider === 'voipms' ? (
+          <div className="space-y-4 border-t border-gray-100 pt-4">
+            <h4 className="text-sm font-semibold text-gray-700">VoIP.ms API Credentials</h4>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 space-y-1">
+              <p className="font-semibold">Setup Steps:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Log in to voip.ms → Main Menu → API → Enable API</li>
+                <li>Set an <strong>API Password</strong> (different from your login password)</li>
+                <li>Whitelist your server IP under "Allowed IPs"</li>
+                <li>Enter your VoIP.ms email and API password below</li>
+                <li>Save, then use "Sub-Accounts" tab to provision users</li>
+              </ol>
+            </div>
+            {[
+              { k: 'api_user', label: 'API Username (your VoIP.ms email)', placeholder: 'you@example.com', secret: false },
+              { k: 'api_pass', label: 'API Password',                       placeholder: 'voipms API password (not login password)', secret: true },
+              { k: 'server',   label: 'WebRTC Server',                      placeholder: 'webrtc.voip.ms', secret: false },
+              { k: 'did',      label: 'Caller DID Number',                  placeholder: '+19025551234', secret: false },
+            ].map(f => (
+              <div key={f.k}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
+                <div className="relative">
+                  <input
+                    type={f.secret && !showSecret[f.k] ? 'password' : 'text'}
+                    value={vmsConfig[f.k] ?? ''}
+                    onChange={e => setVms(f.k, e.target.value)}
+                    placeholder={f.placeholder}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm pr-10 focus:outline-none focus:ring-2 focus:ring-[#1bb0ce]/40 font-mono"
+                  />
+                  {f.secret && (
+                    <button type="button"
+                      onClick={() => setShowSecret(p => ({ ...p, [f.k]: !p[f.k] }))}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >{showSecret[f.k] ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : providerDef.fields.length > 0 ? (
           <div className="space-y-4">
             <h4 className="text-sm font-semibold text-gray-700 border-t border-gray-100 pt-4">
               {providerDef.label} Credentials
@@ -213,32 +278,6 @@ function ProviderSetup() {
                 </div>
               </div>
             ))}
-
-            {/* Integration guide */}
-            {config.provider === 'twilio' && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 space-y-2">
-                <p className="font-semibold">Twilio Setup Steps:</p>
-                <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>Sign up at <a href="https://console.twilio.com" target="_blank" rel="noreferrer" className="underline">console.twilio.com</a></li>
-                  <li>Copy your <strong>Account SID</strong> and <strong>Auth Token</strong> from the dashboard</li>
-                  <li>Create a <strong>TwiML App</strong> (Voice → TwiML Apps) — set Voice URL to your Supabase edge function URL</li>
-                  <li>Buy a phone number and set it as Caller ID</li>
-                  <li>Create a Supabase edge function <code className="bg-blue-100 px-1 rounded">voip-token</code> that generates Twilio access tokens</li>
-                </ol>
-              </div>
-            )}
-            {config.provider === 'telnyx' && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 space-y-2">
-                <p className="font-semibold">Telnyx Setup Steps:</p>
-                <ol className="list-decimal list-inside space-y-1 text-xs">
-                  <li>Sign up at <a href="https://portal.telnyx.com" target="_blank" rel="noreferrer" className="underline">portal.telnyx.com</a></li>
-                  <li>Create an <strong>API Key</strong> in Auth → API Keys</li>
-                  <li>Create a <strong>WebRTC Connection</strong> in Real-Time Communications</li>
-                  <li>Buy a DID number and assign it to your connection</li>
-                  <li>Create a Supabase edge function <code className="bg-blue-100 px-1 rounded">voip-token</code> that returns a Telnyx credential token</li>
-                </ol>
-              </div>
-            )}
           </div>
         ) : (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800">
@@ -694,14 +733,116 @@ function Overview() {
 }
 
 // ── Main admin VoIP page ──────────────────────────────────────
+// ── Sub-Accounts Manager (VoIP.ms provisioning) ───────────────
+function SubAccountsManager() {
+  const { addToast } = useApp();
+  const [users,      setUsers]      = useState([]);
+  const [accounts,   setAccounts]   = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [provisioning, setProvisioning] = useState({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [ur, ar] = await Promise.all([usersApi.list(), voipApi.getAdminAccounts()]);
+      setUsers(ur.data ?? []);
+      setAccounts(ar.data ?? []);
+    } catch {} finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const accountMap = Object.fromEntries((accounts).map(a => [a.user_id, a]));
+
+  const handleProvision = async (userId) => {
+    setProvisioning(p => ({ ...p, [userId]: true }));
+    try {
+      await voipApi.provision(userId);
+      addToast('Sub-account provisioned on VoIP.ms!', 'success');
+      load();
+    } catch (e) {
+      addToast(e?.message || 'Provisioning failed. Check VoIP.ms credentials.', 'error');
+    } finally {
+      setProvisioning(p => ({ ...p, [userId]: false }));
+    }
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+        <p className="font-semibold mb-1">VoIP.ms Sub-Account Provisioning</p>
+        <p className="text-xs">Each user needs a VoIP.ms sub-account to make real phone calls. Click <strong>Provision</strong> to automatically create a sub-account on VoIP.ms and store the SIP credentials. Make sure VoIP.ms API credentials are saved in Provider Setup first.</p>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">User</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">SIP Username</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Server</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {users.filter(u => u.role !== 'admin').map(u => {
+                const acc = accountMap[u.id];
+                const hasAccount = !!(acc?.sip_username);
+                return (
+                  <tr key={u.id} className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-[#0a1628]">{u.name || u.email}</p>
+                      <p className="text-xs text-gray-400">{u.email}</p>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                      {acc?.sip_username || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {acc?.sip_server || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {hasAccount
+                        ? <Badge variant="success" size="sm"><CheckCircle size={11} className="mr-1" />Provisioned</Badge>
+                        : <Badge variant="default" size="sm">Not set up</Badge>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        size="sm"
+                        variant={hasAccount ? 'outline' : 'primary'}
+                        loading={provisioning[u.id]}
+                        onClick={() => handleProvision(u.id)}
+                      >
+                        <Zap size={13} className="mr-1" />
+                        {hasAccount ? 'Re-provision' : 'Provision'}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {users.filter(u => u.role !== 'admin').length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400 text-sm">No users found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminVoIP() {
   const [tab, setTab] = useState('overview');
 
   const TABS = [
-    { key: 'overview', label: 'Overview',       icon: TrendingUp },
-    { key: 'setup',    label: 'Provider Setup',  icon: Settings   },
-    { key: 'logs',     label: 'Call Logs',        icon: List       },
-    { key: 'users',    label: 'User Accounts',    icon: Users      },
+    { key: 'overview',  label: 'Overview',        icon: TrendingUp },
+    { key: 'setup',     label: 'Provider Setup',   icon: Settings   },
+    { key: 'logs',      label: 'Call Logs',         icon: List       },
+    { key: 'users',     label: 'User Accounts',     icon: Users      },
+    { key: 'provision', label: 'Sub-Accounts',      icon: Zap        },
   ];
 
   return (
@@ -726,10 +867,11 @@ export default function AdminVoIP() {
         ))}
       </div>
 
-      {tab === 'overview' && <Overview />}
-      {tab === 'setup'    && <ProviderSetup />}
-      {tab === 'logs'     && <CallLogs />}
-      {tab === 'users'    && <UserAccounts />}
+      {tab === 'overview'  && <Overview />}
+      {tab === 'setup'     && <ProviderSetup />}
+      {tab === 'logs'      && <CallLogs />}
+      {tab === 'users'     && <UserAccounts />}
+      {tab === 'provision' && <SubAccountsManager />}
     </div>
   );
 }

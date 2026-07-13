@@ -726,10 +726,20 @@ case 'voip':
         }
         break;
     case 'settings':
-        $rows = $pdo->query("SELECT `key`, `value` FROM voip_settings")->fetchAll();
-        $map  = [];
-        foreach ($rows as $r) $map[$r['key']] = json_decode($r['value'], true);
-        send($map);
+        if ($method === 'GET') {
+            $rows = $pdo->query("SELECT `key`, `value` FROM voip_settings")->fetchAll();
+            $map  = [];
+            foreach ($rows as $r) $map[$r['key']] = json_decode($r['value'], true);
+            send($map);
+        } elseif ($method === 'PUT') {
+            authUser($pdo, true);
+            $b = body(); // expects { key: value, key2: value2, ... }
+            foreach ($b as $k => $v) {
+                $pdo->prepare("INSERT INTO voip_settings (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)")
+                    ->execute([preg_replace('/[^a-zA-Z0-9_]/', '', $k), json_encode($v)]);
+            }
+            send(['saved' => true]);
+        }
         break;
     default: err('Not found', 404);
     }
@@ -1014,6 +1024,124 @@ case 'notifications':
         send(['sent' => true]);
 
     } else err('Not found', 404);
+    break;
+
+// ═══ VOIP.MS API PROXY ═══════════════════════════════════════════
+case 'voipms':
+    $u = authUser($pdo);
+
+    // Load VoIP.ms admin credentials from voip_settings
+    $rows = $pdo->query("SELECT `key`,`value` FROM voip_settings WHERE `key` IN ('voipms_api_user','voipms_api_pass')")->fetchAll();
+    $cfg  = [];
+    foreach ($rows as $r) $cfg[$r['key']] = json_decode($r['value'], true);
+
+    if (empty($cfg['voipms_api_user']) || empty($cfg['voipms_api_pass'])) {
+        err('VoIP.ms credentials not configured', 503);
+    }
+
+    $method = $_GET['method'] ?? '';
+
+    // Allowed methods for regular users (read-only)
+    $userMethods  = ['getRegistrationStatus', 'getCDR', 'getSubAccounts', 'getVoicemailMessages', 'sendSMS', 'getServersInfo'];
+    // Extra methods only admins may call
+    $adminMethods = ['createSubAccount', 'delSubAccount', 'setSubAccount', 'getSubAccount'];
+    $allowed = $u['role'] === 'admin' ? array_merge($userMethods, $adminMethods) : $userMethods;
+
+    if (!$method || !in_array($method, $allowed, true)) err('Method not allowed', 403);
+
+    // Build params — strip our internal keys, inject voip.ms auth
+    $params = $_GET;
+    unset($params['method'], $params['all']); // clean up
+    $params['api_username'] = $cfg['voipms_api_user'];
+    $params['api_password'] = $cfg['voipms_api_pass'];
+    $params['method']       = $method;
+
+    $url = 'https://voip.ms/api/v1/rest.php?' . http_build_query($params);
+    $ctx = stream_context_create(['http' => ['timeout' => 15, 'ignore_errors' => true]]);
+    $raw = @file_get_contents($url, false, $ctx);
+    if ($raw === false) err('VoIP.ms API unreachable', 502);
+
+    $resp = json_decode($raw, true);
+    send($resp ?? ['status' => 'error', 'error' => 'Invalid response from VoIP.ms']);
+    break;
+
+// ═══ VOIP.MS SUB-ACCOUNT PROVISIONING ════════════════════════════
+case 'provision':
+    $admin = authUser($pdo, true);
+
+    // Load VoIP.ms credentials
+    $rows = $pdo->query("SELECT `key`,`value` FROM voip_settings WHERE `key` IN ('voipms_api_user','voipms_api_pass','voipms_server')")->fetchAll();
+    $cfg  = [];
+    foreach ($rows as $r) $cfg[$r['key']] = json_decode($r['value'], true);
+
+    if (empty($cfg['voipms_api_user']) || empty($cfg['voipms_api_pass'])) err('VoIP.ms credentials not configured', 503);
+
+    $b          = body();
+    $target_uid = $b['user_id'] ?? null;
+    if (!$target_uid) err('user_id required', 400);
+
+    // Generate unique sub-account name (max 20 chars after main account prefix)
+    $short   = preg_replace('/[^a-z0-9]/', '', strtolower(substr($target_uid, 0, 12)));
+    $subname = 'u' . $short;
+
+    // Generate secure SIP password
+    $sipPass = substr(str_replace(['/', '+', '='], '', base64_encode(random_bytes(12))), 0, 12) . '@1';
+
+    $apiUser = $cfg['voipms_api_user'];
+    $apiPass = $cfg['voipms_api_pass'];
+    $server  = $cfg['voipms_server'] ?? 'toronto.voip.ms';
+
+    // Check if sub-account already exists
+    $checkUrl = 'https://voip.ms/api/v1/rest.php?' . http_build_query([
+        'api_username' => $apiUser,
+        'api_password' => $apiPass,
+        'method'       => 'getSubAccount',
+        'account'      => $subname,
+    ]);
+    $ctx  = stream_context_create(['http' => ['timeout' => 15, 'ignore_errors' => true]]);
+    $chk  = json_decode(@file_get_contents($checkUrl, false, $ctx), true);
+
+    if (!$chk || $chk['status'] !== 'success') {
+        // Create the sub-account on VoIP.ms
+        $createUrl = 'https://voip.ms/api/v1/rest.php?' . http_build_query([
+            'api_username'     => $apiUser,
+            'api_password'     => $apiPass,
+            'method'           => 'createSubAccount',
+            'username'         => $subname,
+            'password'         => $sipPass,
+            'protocol'         => 1,   // SIP
+            'auth_type'        => 1,   // Password auth
+            'device_callerid'  => '',
+            'lock_international' => 0,
+            'international_route' => 0,
+            'music_on_hold'    => 'default',
+            'allowed_codecs'   => 'ulaw;g729;gsm',
+            'dtmf_mode'        => 'rfc2833',
+            'nat'              => 'yes',
+        ]);
+        $result = json_decode(@file_get_contents($createUrl, false, $ctx), true);
+        if (!$result || $result['status'] !== 'success') {
+            err('VoIP.ms sub-account creation failed: ' . ($result['status'] ?? 'unknown'), 502);
+        }
+    } else {
+        // Already exists — use existing sub-account, reset password
+        $sipPass = null; // don't overwrite
+    }
+
+    // Build full SIP username (voip.ms format: mainuser_subname)
+    $mainUser   = explode('@', $apiUser)[0]; // strip domain if email
+    $sipUsername = $apiUser . '_' . $subname; // voip.ms uses full email_sub format
+
+    // Save to local DB
+    $pdo->prepare(
+        'INSERT INTO voip_accounts (user_id, sip_username, sip_password, sip_server, voip_enabled) VALUES (?,?,?,?,1)
+         ON DUPLICATE KEY UPDATE sip_username=VALUES(sip_username), sip_password=COALESCE(VALUES(sip_password), sip_password), sip_server=VALUES(sip_server)'
+    )->execute([$target_uid, $sipUsername, $sipPass, $server]);
+
+    // Return the account so admin can see it
+    $s = $pdo->prepare('SELECT * FROM voip_accounts WHERE user_id=?');
+    $s->execute([$target_uid]);
+    send($s->fetch());
     break;
 
 default:
