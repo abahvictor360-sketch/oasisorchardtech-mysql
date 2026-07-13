@@ -27,8 +27,29 @@
 
     <!-- Preconnects -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://js.stripe.com" />
     <link rel="preconnect" href="https://www.paypal.com" />
+
+    <!--
+      Fonts load non-blocking: media="print" makes the browser fetch the
+      stylesheet without waiting for it before painting, then onload
+      flips it to the real media so styles apply. This alone removes the
+      font request from the critical rendering path (previously ~1.8s
+      blocking every page via @import in index.css).
+    -->
+    <link
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,300;9..144,450;9..144,560;9..144,650&family=Space+Mono:wght@400;700&display=swap"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,300;9..144,450;9..144,560;9..144,650&family=Space+Mono:wght@400;700&display=swap"
+      />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>

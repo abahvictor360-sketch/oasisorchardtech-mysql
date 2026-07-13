@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,300;9..144,450;9..144,560;9..144,650&family=Space+Mono:wght@400;700&display=swap');
+/* Fonts are loaded non-blocking from index.html (not @import here) —
+   @import inside a stylesheet forces the browser to fetch and parse
+   Google's CSS before it can even finish parsing this file, adding a
+   full extra network round trip to the critical rendering path. */
 @import "tailwindcss";
 
 :root {
