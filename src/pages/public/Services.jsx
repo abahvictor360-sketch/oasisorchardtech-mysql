@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import {
   Phone, Wifi, Smartphone, Check, ChevronDown, ChevronUp,
-  ArrowRight, Settings, UserCheck, Headphones, ShieldCheck, Globe, Zap,
+  ArrowRight, ShieldCheck, Globe,
 } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -12,9 +12,6 @@ import { servicesFaqSchema, organizationSchema } from '../../lib/schemas';
 
 // ── Icons for service cards (fixed — not editable) ────────────
 const CARD_ICONS = [Phone, Wifi, Globe, ShieldCheck];
-
-// ── Icons for process steps (fixed) ──────────────────────────
-const STEP_ICONS = [UserCheck, Settings, Phone, Headphones];
 
 // ── Hardcoded defaults (used until Supabase data loads) ───────
 const DEFAULTS = {
@@ -83,10 +80,12 @@ export default function Services() {
       />
     <div className="min-h-screen">
       {/* ── HERO ── */}
-      <section className="relative py-24" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-6">{hero.title}</h1>
-          <p className="text-blue-100 text-lg sm:text-xl max-w-2xl mx-auto">{hero.subtitle}</p>
+      <section className="relative overflow-hidden py-24" style={{ background: '#0a1628' }}>
+        <div className="absolute -right-40 -top-40 w-[500px] h-[500px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, #1bb0ce 0%, transparent 70%)' }} />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <span className="inline-block text-[#1bb0ce] text-xs font-bold tracking-[0.18em] uppercase mb-5">Business &amp; Home Phone Service</span>
+          <h1 className="font-display text-4xl sm:text-5xl text-white mb-6" style={{ fontWeight: 560 }}>{hero.title}</h1>
+          <p className="text-blue-100/80 text-lg sm:text-xl max-w-2xl mx-auto">{hero.subtitle}</p>
         </div>
       </section>
 
@@ -94,8 +93,8 @@ export default function Services() {
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">Communication Services</h2>
-            <p className="text-gray-500 text-lg max-w-xl mx-auto">
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>Communication services</h2>
+            <p className="text-[--ink-soft] text-lg max-w-xl mx-auto">
               Everything you need for modern business communication — all powered by internet.
             </p>
           </div>
@@ -104,11 +103,12 @@ export default function Services() {
               const Icon = CARD_ICONS[i % CARD_ICONS.length];
               return (
                 <Card key={i} hover className="p-6 flex flex-col">
-                  <div className="w-12 h-12 rounded-full bg-[#1bb0ce]/10 flex items-center justify-center mb-4">
-                    <Icon size={24} className="text-[#1bb0ce]" />
+                  <span className="font-mono-num block text-xs text-gray-400 mb-3">LINE {String(i + 1).padStart(2, '0')}</span>
+                  <div className="w-12 h-12 rounded-xl bg-[#1bb0ce]/10 flex items-center justify-center mb-4">
+                    <Icon size={22} className="text-[#1bb0ce]" />
                   </div>
                   <h3 className="font-bold text-[#0a1628] mb-2">{card.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed mb-4 flex-1">{card.description}</p>
+                  <p className="text-[--ink-soft] text-sm leading-relaxed mb-4 flex-1">{card.description}</p>
                   <ul className="space-y-1">
                     {(card.features || []).map(f => (
                       <li key={f} className="flex items-center gap-2 text-gray-600 text-xs">
@@ -124,15 +124,15 @@ export default function Services() {
       </section>
 
       {/* ── HOME PHONE ── */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20" style={{ background: 'var(--paper)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
               <div className="inline-flex items-center gap-2 bg-[#1bb0ce]/10 text-[#1bb0ce] px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
                 <Phone size={16} /> Home Phone Services
               </div>
-              <h2 className="text-3xl font-bold text-[#0a1628] mb-4">{homePhone.heading}</h2>
-              <p className="text-gray-600 leading-relaxed mb-6">{homePhone.description}</p>
+              <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>{homePhone.heading}</h2>
+              <p className="text-[--ink-soft] leading-relaxed mb-6">{homePhone.description}</p>
               <ul className="space-y-4 mb-8">
                 {(homePhone.benefits || []).map(b => (
                   <li key={b} className="flex items-center gap-3 text-gray-700">
@@ -142,7 +142,7 @@ export default function Services() {
               </ul>
               <Link to="/pricing"><Button variant="primary">View Home Plans <ArrowRight size={16} /></Button></Link>
             </div>
-            <div className="bg-gradient-to-br from-[#0a1628]/5 to-[#1bb0ce]/15 rounded-2xl h-72 flex items-center justify-center border border-[#1bb0ce]/20">
+            <div className="rounded-2xl h-72 flex items-center justify-center border bg-white" style={{ borderColor: 'var(--mist)' }}>
               <Phone size={96} className="text-[#1bb0ce] opacity-40" />
             </div>
           </div>
@@ -153,15 +153,15 @@ export default function Services() {
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div className="order-2 lg:order-1 bg-gradient-to-br from-[#1bb0ce]/10 to-[#0a1628]/10 rounded-2xl h-72 flex items-center justify-center border border-[#1bb0ce]/20">
+            <div className="order-2 lg:order-1 rounded-2xl h-72 flex items-center justify-center border" style={{ background: 'var(--paper)', borderColor: 'var(--mist)' }}>
               <Smartphone size={96} className="text-[#1bb0ce] opacity-40" />
             </div>
             <div className="order-1 lg:order-2">
               <div className="inline-flex items-center gap-2 bg-[#1bb0ce]/10 text-[#1bb0ce] px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
                 <Smartphone size={16} /> Mobile Phone
               </div>
-              <h2 className="text-3xl font-bold text-[#0a1628] mb-4">{mobile.heading}</h2>
-              <p className="text-gray-600 leading-relaxed mb-6">{mobile.description}</p>
+              <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>{mobile.heading}</h2>
+              <p className="text-[--ink-soft] leading-relaxed mb-6">{mobile.description}</p>
               <ul className="space-y-4 mb-8">
                 {(mobile.benefits || []).map(b => (
                   <li key={b} className="flex items-center gap-3 text-gray-700">
@@ -176,30 +176,22 @@ export default function Services() {
       </section>
 
       {/* ── PROCESS ── */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20" style={{ background: 'var(--paper)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">How Our Service Works</h2>
-            <p className="text-gray-500 text-lg max-w-xl mx-auto">From signup to your first call — we make the process seamless.</p>
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>How our service works</h2>
+            <p className="text-[--ink-soft] text-lg max-w-xl mx-auto">From signup to your first call — we make the process seamless.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {process.map((step, i) => {
-              const Icon = STEP_ICONS[i % STEP_ICONS.length];
-              return (
-                <div key={i} className="text-center">
-                  <div className="relative inline-block mb-4">
-                    <div className="w-16 h-16 rounded-full bg-[#1bb0ce] flex items-center justify-center shadow-lg mx-auto">
-                      <Icon size={28} className="text-white" />
-                    </div>
-                    <span className="absolute -top-1 -right-1 bg-[#0a1628] text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-[#0a1628] mb-2">{step.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{step.description}</p>
+            {process.map((step, i) => (
+              <div key={i} className="text-center">
+                <div className="w-16 h-16 rounded-2xl bg-[#0a1628] text-[#1bb0ce] flex items-center justify-center font-mono-num text-xl font-bold mx-auto mb-4">
+                  {String(i + 1).padStart(2, '0')}
                 </div>
-              );
-            })}
+                <h3 className="font-bold text-[#0a1628] mb-2">{step.title}</h3>
+                <p className="text-[--ink-soft] text-sm leading-relaxed">{step.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -208,8 +200,8 @@ export default function Services() {
       <section className="py-20 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">Frequently Asked Questions</h2>
-            <p className="text-gray-500">Everything you want to know about our phone service.</p>
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>Frequently asked questions</h2>
+            <p className="text-[--ink-soft]">Everything you want to know about our phone service.</p>
           </div>
           <div className="space-y-3">
             {faqs.map((faq, idx) => {
@@ -226,7 +218,7 @@ export default function Services() {
                       : <ChevronDown size={20} className="text-gray-400 shrink-0" />}
                   </button>
                   <div className="overflow-hidden transition-all duration-300" style={{ maxHeight: isOpen ? '400px' : '0px' }}>
-                    <p className="px-6 pb-5 text-gray-600 leading-relaxed">{faq.answer}</p>
+                    <p className="px-6 pb-5 text-[--ink-soft] leading-relaxed">{faq.answer}</p>
                   </div>
                 </div>
               );
@@ -236,10 +228,10 @@ export default function Services() {
       </section>
 
       {/* ── CTA ── */}
-      <section className="py-16" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}>
+      <section className="py-16" style={{ background: '#0a1628' }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-extrabold text-white mb-4">{cta.title}</h2>
-          <p className="text-blue-100 mb-8">{cta.subtitle}</p>
+          <h2 className="font-display text-3xl text-white mb-4" style={{ fontWeight: 560 }}>{cta.title}</h2>
+          <p className="text-blue-100/80 mb-8">{cta.subtitle}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             {cta.button1 && <Link to="/signup"><Button size="lg" variant="white">{cta.button1}</Button></Link>}
             {cta.button2 && <Link to="/support"><Button size="lg" variant="white-outline">{cta.button2}</Button></Link>}

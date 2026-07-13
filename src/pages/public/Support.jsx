@@ -173,14 +173,16 @@ export default function Support() {
     <div className="min-h-screen">
       {/* ── HERO ── */}
       <section
-        className="relative py-24"
-        style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}
+        className="relative overflow-hidden py-24"
+        style={{ background: '#0a1628' }}
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-6">
-            How Can We Help?
+        <div className="absolute -right-40 -top-40 w-[500px] h-[500px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, #1bb0ce 0%, transparent 70%)' }} />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <span className="inline-block text-[#1bb0ce] text-xs font-bold tracking-[0.18em] uppercase mb-5">Real People · 24/7</span>
+          <h1 className="font-display text-4xl sm:text-5xl text-white mb-6" style={{ fontWeight: 560 }}>
+            How can we help?
           </h1>
-          <p className="text-blue-100 text-lg mb-10">
+          <p className="text-blue-100/80 text-lg mb-10">
             Search our help center or browse categories below.
           </p>
           {/* Search bar (decorative) */}
@@ -199,10 +201,10 @@ export default function Support() {
       </section>
 
       {/* ── QUICK LINKS ── */}
-      <section className="py-16 bg-gray-50">
+      <section className="py-16" style={{ background: 'var(--paper)' }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-[#0a1628] text-center mb-8">
-            Browse by Category
+          <h2 className="font-display text-2xl text-[#0a1628] text-center mb-8" style={{ fontWeight: 560 }}>
+            Browse by category
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {quickLinks.map(({ icon: Icon, title, description, color }) => (
@@ -224,10 +226,10 @@ export default function Support() {
       <section className="py-20 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">
-              Frequently Asked Questions
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>
+              Frequently asked questions
             </h2>
-            <p className="text-gray-500">Quick answers to our most common questions.</p>
+            <p className="text-[--ink-soft]">Quick answers to our most common questions.</p>
           </div>
           <div className="space-y-3">
             {faqs.map((faq, idx) => {
@@ -257,7 +259,7 @@ export default function Support() {
                     className="overflow-hidden transition-all duration-300"
                     style={{ maxHeight: isOpen ? '400px' : '0px' }}
                   >
-                    <p className="px-6 pb-5 text-gray-600 leading-relaxed">{faq.answer}</p>
+                    <p className="px-6 pb-5 text-[--ink-soft] leading-relaxed">{faq.answer}</p>
                   </div>
                 </div>
               );
@@ -267,11 +269,11 @@ export default function Support() {
       </section>
 
       {/* ── CONTACT OPTIONS ── */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20" style={{ background: 'var(--paper)' }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">Contact Us</h2>
-            <p className="text-gray-500">
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>Contact us</h2>
+            <p className="text-[--ink-soft]">
               Can't find what you need? Our team is standing by.
             </p>
           </div>
@@ -300,8 +302,8 @@ export default function Support() {
       <section className="py-20 bg-white">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">Send Us a Message</h2>
-            <p className="text-gray-500">
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>Send us a message</h2>
+            <p className="text-[--ink-soft]">
               Fill out the form below and we'll respond within 4 hours during business hours.
             </p>
           </div>

@@ -75,14 +75,16 @@ export default function Pricing() {
     <div className="min-h-screen">
       {/* ── HERO ── */}
       <section
-        className="relative py-24"
-        style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}
+        className="relative overflow-hidden py-24"
+        style={{ background: '#0a1628' }}
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-6">
-            Simple, Transparent Pricing
+        <div className="absolute -left-40 -top-40 w-[500px] h-[500px] rounded-full opacity-20 blur-3xl pointer-events-none" style={{ background: 'radial-gradient(circle, #1bb0ce 0%, transparent 70%)' }} />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <span className="inline-block text-[#1bb0ce] text-xs font-bold tracking-[0.18em] uppercase mb-5">No Contracts · Cancel Anytime</span>
+          <h1 className="font-display text-4xl sm:text-5xl text-white mb-6" style={{ fontWeight: 560 }}>
+            Simple, transparent pricing
           </h1>
-          <p className="text-blue-100 text-lg sm:text-xl max-w-2xl mx-auto mb-10">
+          <p className="text-blue-100/80 text-lg sm:text-xl max-w-2xl mx-auto mb-10">
             No hidden fees. No contracts. Just great service at an unbeatable price.
           </p>
 
@@ -117,7 +119,7 @@ export default function Pricing() {
       </section>
 
       {/* ── PLAN CARDS ── */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20" style={{ background: 'var(--paper)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
             {servicePlans.map((plan) => (
@@ -131,12 +133,12 @@ export default function Pricing() {
                 ].join(' ')}
               >
                 {plan.popular && (
-                  <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#1bb0ce] text-white text-xs font-bold px-5 py-1.5 rounded-full uppercase tracking-wide shadow">
+                  <span className="absolute -top-3 left-8 text-white text-xs font-bold px-3 py-1.5 rounded-lg uppercase tracking-wide shadow-lg -rotate-2" style={{ background: 'var(--dial)' }}>
                     Most Popular
                   </span>
                 )}
 
-                <h3 className="text-xl font-bold text-[#0a1628] mb-1">{plan.name}</h3>
+                <h3 className="font-display text-xl text-[#0a1628] mb-1" style={{ fontWeight: 560 }}>{plan.name}</h3>
                 <p className="text-gray-400 text-sm mb-6">
                   {plan.id === 'basic' && 'Perfect for individuals and small teams.'}
                   {plan.id === 'smart' && 'The most popular choice for growing businesses.'}
@@ -144,7 +146,7 @@ export default function Pricing() {
                 </p>
 
                 <div className="flex items-end gap-1 mb-8">
-                  <span className="text-5xl font-extrabold text-[#1bb0ce]">
+                  <span className="font-mono-num text-5xl font-bold text-[#1bb0ce]">
                     ${getPrice(plan.price)}
                   </span>
                   <span className="text-gray-400 mb-1.5">{getPeriodLabel()}</span>
@@ -180,8 +182,8 @@ export default function Pricing() {
       <section className="py-20 bg-white">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">Full Feature Comparison</h2>
-            <p className="text-gray-500">See exactly what's included in each plan.</p>
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>Full feature comparison</h2>
+            <p className="text-[--ink-soft]">See exactly what's included in each plan.</p>
           </div>
           <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 rounded-2xl border border-gray-200 shadow-sm">
             <table className="w-full min-w-[480px]">
@@ -218,11 +220,11 @@ export default function Pricing() {
       </section>
 
       {/* ── FAQ ── */}
-      <section className="py-20 bg-gray-50">
+      <section className="py-20" style={{ background: 'var(--paper)' }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-[#0a1628] mb-4">Pricing FAQs</h2>
-            <p className="text-gray-500">Common questions about billing and plans.</p>
+            <h2 className="font-display text-3xl text-[#0a1628] mb-4" style={{ fontWeight: 560 }}>Pricing FAQs</h2>
+            <p className="text-[--ink-soft]">Common questions about billing and plans.</p>
           </div>
           <div className="space-y-3">
             {pricingFaqs.map((faq, idx) => {
@@ -247,7 +249,7 @@ export default function Pricing() {
                     className="overflow-hidden transition-all duration-300"
                     style={{ maxHeight: isOpen ? '300px' : '0px' }}
                   >
-                    <p className="px-6 pb-5 text-gray-600 leading-relaxed">{faq.answer}</p>
+                    <p className="px-6 pb-5 text-[--ink-soft] leading-relaxed">{faq.answer}</p>
                   </div>
                 </div>
               );
@@ -259,13 +261,13 @@ export default function Pricing() {
       {/* ── CTA ── */}
       <section
         className="py-16"
-        style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1bb0ce 100%)' }}
+        style={{ background: '#0a1628' }}
       >
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-extrabold text-white mb-4">
-            Start Saving Today
+          <h2 className="font-display text-3xl text-white mb-4" style={{ fontWeight: 560 }}>
+            Start saving today
           </h2>
-          <p className="text-blue-100 mb-8">
+          <p className="text-blue-100/80 mb-8">
             No hidden fees, no contracts. Join hundreds of customers already enjoying
             crystal-clear service.
           </p>
