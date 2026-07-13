@@ -305,11 +305,13 @@ switch ($r0) {
 // ═══ HEALTH ═══════════════════════════════════════════════════════
 case 'health':
     send([
-        'status'      => 'ok',
-        'db'          => 'connected',
-        'config_file' => isset($__configFoundAt) && $__configFoundAt !== null
-            ? 'found (' . $__configFoundAt . ' level(s) above the api folder)'
-            : 'using fallback values',
+        'status'        => 'ok',
+        'db'            => 'connected',
+        'config_file'   => isset($__configFoundAt) && $__configFoundAt !== null ? 'found' : 'using fallback values',
+        'found_at_path' => isset($__configFoundAt) && $__configFoundAt !== null
+            ? ($__configCheckedAt[$__configFoundAt - 1]['path'] ?? null)
+            : null,
+        'checked_paths' => $__configCheckedAt ?? [],
     ]);
     break;
 
