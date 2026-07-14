@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && (node scripts/prerender.mjs || echo 'prerender step failed — shipping SPA-only build instead')",
+    "build:no-prerender": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

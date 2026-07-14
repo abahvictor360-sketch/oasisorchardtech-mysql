@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 const WishlistContext = createContext(null);
 
 function loadWishlist() {
+  if (typeof window === 'undefined') return []; // SSR/prerender — no localStorage
   try {
     const stored = localStorage.getItem('oasis_wishlist');
     return stored ? JSON.parse(stored) : [];

@@ -19,7 +19,11 @@ export async function saveHomeLayout(layout) {
 
 export function useHomeLayout() {
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
-  const [loading, setLoading] = useState(true);
+  // On the server (prerendering) effects never run, so `loading` would stay
+  // true forever and the page would render only the spinner. Trust the
+  // (real, sensible) DEFAULT_LAYOUT immediately in that environment; the
+  // browser still shows the brief loading state as before.
+  const [loading, setLoading] = useState(typeof window !== 'undefined');
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -1,0 +1,10 @@
+[
+  { "path": "/" },
+  { "path": "/about" },
+  { "path": "/services" },
+  { "path": "/pricing" },
+  { "path": "/support" },
+  { "path": "/terms" },
+  { "path": "/privacy" },
+  { "path": "/shop" }
+]

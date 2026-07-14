@@ -22,6 +22,7 @@ function normalizeItem(item) {
 }
 
 function loadCart() {
+  if (typeof window === 'undefined') return []; // SSR/prerender — no localStorage
   try {
     const stored = localStorage.getItem('oasis_cart');
     return stored ? JSON.parse(stored).map(normalizeItem) : [];

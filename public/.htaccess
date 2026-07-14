@@ -5,10 +5,14 @@ RewriteCond %{HTTPS} !=on
 RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
 
 # ── SPA routing ───────────────────────────────────────────────
+# Fallback template for routes that are NOT prerendered (cart, checkout,
+# dashboard, admin, login, etc.) is app-shell.html, not index.html —
+# index.html is the real prerendered homepage, and every non-prerendered
+# route must NOT serve homepage content/title. See scripts/prerender.mjs.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_URI} !^/api/
-RewriteRule ^ index.html [L]
+RewriteRule ^ app-shell.html [L]
 
 # ── Security headers ──────────────────────────────────────────
 <IfModule mod_headers.c>
