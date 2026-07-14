@@ -8,6 +8,8 @@ import { useVoip, CALL_STATUS } from '../../context/VoipContext';
 import { useWallet } from '../../context/WalletContext';
 import { useApp } from '../../context/AppContext';
 import Softphone from '../../components/voip/Softphone';
+import SmsPanel from '../../components/voip/SmsPanel';
+import VoicemailPanel from '../../components/voip/VoicemailPanel';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -44,7 +46,7 @@ export default function VoIP() {
   const {
     voipEnabled, voipCredits, phoneNumber,
     usedMinutes, planMinutes, remainingPlanMinutes,
-    callHistory, providerReady, callStatus,
+    callHistory, providerReady, callStatus, isVoipMs,
     topUpVoipCredits,
   } = useVoip();
   const { balance, deduct } = useWallet();
@@ -258,6 +260,14 @@ export default function VoIP() {
           </div>
         )}
       </Card>
+
+      {/* SMS + Voicemail — only meaningful once a real VoIP.ms line is connected */}
+      {isVoipMs && providerReady && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          <SmsPanel />
+          <VoicemailPanel />
+        </div>
+      )}
 
       {/* Top Up Modal */}
       <Modal
