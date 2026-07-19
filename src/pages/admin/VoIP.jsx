@@ -97,10 +97,9 @@ const STATUS_BADGE = {
   failed:    { variant: 'danger',  label: 'Failed'    },
 };
 
-// ── Save setting (provider_config → page_content via contentApi) ─
+// ── Save setting (stored in voip_settings — same table the dashboard reads) ─
 async function saveSetting(key, value) {
-  const { content: contentApi } = await import('../../lib/api');
-  const { error } = await contentApi.save(`voip_setting_${key}`, value);
+  const { error } = await voipApi.saveSettings({ [key]: value });
   if (error) throw new Error(error.message);
 }
 

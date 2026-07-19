@@ -40,6 +40,22 @@ export const auth = {
     return req('/auth/change-password', { method: 'POST', body: { current, new: newPassword } });
   },
 
+  sendVerification() {
+    return req('/auth/send-verification', { method: 'POST' });
+  },
+
+  verifyEmail(token) {
+    return req(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+  },
+
+  forgotPassword(email) {
+    return req('/auth/forgot-password', { method: 'POST', body: { email } });
+  },
+
+  resetPassword(token, password) {
+    return req('/auth/reset-password', { method: 'POST', body: { token, password } });
+  },
+
   async getSession() {
     const token = localStorage.getItem('oasis_token');
     if (!token) return { data: { session: null }, error: null };
@@ -103,8 +119,10 @@ export const users = {
 
 // ── Wallet ────────────────────────────────────────────────────
 export const wallet = {
-  transactions: (uid) => req(`/wallet/${uid}`),
-  credit:       (data) => req('/wallet/credit', { method: 'POST', body: data }),
+  transactions:    (uid)  => req(`/wallet/${uid}`),
+  credit:          (data) => req('/wallet/credit',              { method: 'POST', body: data }),
+  topupStripe:     (amt)  => req('/wallet/topup/stripe',        { method: 'POST', body: { amount: amt } }),
+  topupConfirm:    (id)   => req('/wallet/topup/confirm',       { method: 'POST', body: { intent_id: id } }),
 };
 
 // ── Payments ─────────────────────────────────────────────────
@@ -113,8 +131,6 @@ export const payments = {
   settings:            ()          => req('/payments/settings'),
   saveSettings:        (data)      => req('/payments/settings', { method: 'PUT', body: data }),
   createStripeIntent:  (data)      => req('/payments/stripe/create-intent', { method: 'POST', body: data }),
-  createPaypalOrder:   (data)      => req('/payments/paypal/create-order',  { method: 'POST', body: data }),
-  capturePaypal:       (data)      => req('/payments/paypal/capture',        { method: 'POST', body: data }),
 };
 
 // ── Orders ────────────────────────────────────────────────────
@@ -123,6 +139,32 @@ export const orders = {
   create: (data)     => req('/orders', { method: 'POST', body: data }),
   get:    (id)       => req(`/orders/${id}`),
   update: (id, data) => req(`/orders/${id}`, { method: 'PATCH', body: data }),
+};
+
+// ── Support notifications ──────────────────────────────────────
+export const supportNotify = {
+  newMessage: (subject, message) =>
+    req('/support-notify/new', { method: 'POST', body: { subject, message } }),
+  sendReply: (userEmail, userName, subject, message) =>
+    req('/support-notify/reply', { method: 'POST', body: { user_email: userEmail, user_name: userName, subject, message } }),
+};
+
+// ── SMTP ──────────────────────────────────────────────────────
+export const smtp = {
+  getSettings:  ()         => req('/smtp/settings'),
+  saveSettings: (data)     => req('/smtp/settings', { method: 'PUT', body: data }),
+  test:         (email)    => req('/smtp/test',     { method: 'POST', body: { email } }),
+};
+
+// ── Email Templates ───────────────────────────────────────────
+export const emailTemplates = {
+  list:    ()             => req('/email-templates'),
+  get:     (id)           => req(`/email-templates/${id}`),
+  create:  (data)         => req('/email-templates', { method: 'POST', body: data }),
+  update:  (id, data)     => req(`/email-templates/${id}`, { method: 'PUT', body: data }),
+  remove:  (id)           => req(`/email-templates/${id}`, { method: 'DELETE' }),
+  reset:   (id)           => req(`/email-templates/${id}/reset`, { method: 'POST' }),
+  test:    (id, email)    => req(`/email-templates/${id}/test`, { method: 'POST', body: { email } }),
 };
 
 // ── VoIP ──────────────────────────────────────────────────────

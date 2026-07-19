@@ -23,9 +23,12 @@ const Pricing     = lazy(() => import('./pages/public/Pricing'));
 const Support     = lazy(() => import('./pages/public/Support'));
 const Login       = lazy(() => import('./pages/public/Login'));
 const Signup      = lazy(() => import('./pages/public/Signup'));
-const Terms       = lazy(() => import('./pages/public/Terms'));
-const Privacy     = lazy(() => import('./pages/public/Privacy'));
-const CustomPage  = lazy(() => import('./pages/public/CustomPage'));
+const Terms          = lazy(() => import('./pages/public/Terms'));
+const Privacy        = lazy(() => import('./pages/public/Privacy'));
+const CustomPage     = lazy(() => import('./pages/public/CustomPage'));
+const ForgotPassword = lazy(() => import('./pages/public/ForgotPassword'));
+const ResetPassword  = lazy(() => import('./pages/public/ResetPassword'));
+const VerifyEmail    = lazy(() => import('./pages/public/VerifyEmail'));
 
 // Shop pages
 const ShopPage     = lazy(() => import('./pages/shop/ShopPage'));
@@ -55,7 +58,8 @@ const AdminSupport = lazy(() => import('./pages/admin/Support'));
 const AdminContent = lazy(() => import('./pages/admin/Content'));
 const AdminVoIP     = lazy(() => import('./pages/admin/VoIP'));
 const AdminPayments      = lazy(() => import('./pages/admin/Payments'));
-const AdminNotifications = lazy(() => import('./pages/admin/Notifications'));
+const AdminNotifications  = lazy(() => import('./pages/admin/Notifications'));
+const AdminEmailTemplates = lazy(() => import('./pages/admin/EmailTemplates'));
 const AdminCategories    = lazy(() => import('./pages/admin/Categories'));
 const AdminAccount       = lazy(() => import('./pages/admin/Account'));
 
@@ -73,7 +77,8 @@ function PageLoader() {
 
 // ── Route guards ───────────────────────────────────────────────
 function ProtectedRoute({ children, role }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
+  if (loading) return <PageLoader />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (role && user?.role !== role) {
     return <Navigate to={user?.role === 'admin' ? '/admin' : '/dashboard'} replace />;
@@ -111,9 +116,12 @@ function App() {
             <Route path="/support" element={<PublicLayout><Support /></PublicLayout>} />
             <Route path="/login"   element={<PublicLayout><Login /></PublicLayout>} />
             <Route path="/signup"  element={<PublicLayout><Signup /></PublicLayout>} />
-            <Route path="/terms"   element={<PublicLayout><Terms /></PublicLayout>} />
-            <Route path="/privacy" element={<PublicLayout><Privacy /></PublicLayout>} />
-            <Route path="/p/:slug" element={<PublicLayout><CustomPage /></PublicLayout>} />
+            <Route path="/terms"            element={<PublicLayout><Terms /></PublicLayout>} />
+            <Route path="/privacy"          element={<PublicLayout><Privacy /></PublicLayout>} />
+            <Route path="/p/:slug"          element={<PublicLayout><CustomPage /></PublicLayout>} />
+            <Route path="/forgot-password"  element={<PublicLayout><ForgotPassword /></PublicLayout>} />
+            <Route path="/reset-password"   element={<PublicLayout><ResetPassword /></PublicLayout>} />
+            <Route path="/verify-email"     element={<PublicLayout><VerifyEmail /></PublicLayout>} />
 
             {/* Shop routes */}
             <Route path="/shop"           element={<PublicLayout><ShopPage /></PublicLayout>} />
@@ -155,7 +163,8 @@ function App() {
               <Route path="content"   element={<AdminContent />} />
               <Route path="voip"      element={<AdminVoIP />} />
               <Route path="payments"      element={<AdminPayments />} />
-              <Route path="notifications" element={<AdminNotifications />} />
+              <Route path="notifications"    element={<AdminNotifications />} />
+              <Route path="email-templates" element={<AdminEmailTemplates />} />
               <Route path="categories"    element={<AdminCategories />} />
               <Route path="account"       element={<AdminAccount />} />
             </Route>

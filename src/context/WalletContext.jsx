@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { getWalletTransactions, topUpWallet, deductWallet } from '../lib/db';
+import { wallet as walletApi } from '../lib/api';
 
 const WalletContext = createContext(null);
 
@@ -30,9 +31,16 @@ export function WalletProvider({ children }) {
     if (!user?.id) throw new Error('Not authenticated');
     const { transaction, newBalance } = await topUpWallet(user.id, amount);
     setTransactions(prev => [transaction, ...prev]);
-    // Update user profile balance in auth context
     await updateUser({ walletBalance: newBalance });
     return { newBalance };
+  }
+
+  async function updateBalance(newBalance) {
+    await updateUser({ walletBalance: newBalance });
+    if (user?.id) {
+      const { data } = await walletApi.transactions(user.id);
+      if (data) setTransactions(data);
+    }
   }
 
   async function deduct(amount, description) {
@@ -58,6 +66,7 @@ export function WalletProvider({ children }) {
       setFilter,
       topUp,
       deduct,
+      updateBalance,
     }}>
       {children}
     </WalletContext.Provider>

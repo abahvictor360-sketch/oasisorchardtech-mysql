@@ -128,7 +128,7 @@ export function VoipProvider({ children }) {
     try {
       const { data } = await voipApi.getAccount();
       if (data) {
-        setVoipCredits(parseFloat(data.voip_credits) ?? 0);
+        setVoipCredits(parseFloat(data.voip_credits) || 0);
         setPhoneNumber(data.phone_number ?? null);
         if (data.sip_username && data.sip_password) {
           setSipCreds({

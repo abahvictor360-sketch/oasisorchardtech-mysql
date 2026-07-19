@@ -6,7 +6,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 
-const TABS = ['Stripe', 'PayPal', 'General'];
+const TABS = ['Stripe', 'General'];
 
 function MaskedInput({ label, name, value, onChange, placeholder, hint }) {
   const [show, setShow] = useState(false);
@@ -85,7 +85,6 @@ export default function Payments() {
   if (loading) return <div className="flex items-center justify-center py-20"><Spinner /></div>;
 
   const stripeEnabled = cfg.stripe_enabled === 'true';
-  const paypalEnabled = cfg.paypal_enabled === 'true';
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -95,8 +94,8 @@ export default function Payments() {
           <CreditCard size={20} className="text-[#1bb0ce]" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-[#0a1628]">Payment Gateways</h2>
-          <p className="text-sm text-gray-400">Configure Stripe and PayPal for checkout</p>
+          <h2 className="text-lg font-bold text-[#0a1628]">Payment Gateway</h2>
+          <p className="text-sm text-gray-400">Configure Stripe for checkout</p>
         </div>
       </div>
 
@@ -109,16 +108,6 @@ export default function Payments() {
             <p className="text-xs text-gray-400">Credit &amp; debit cards</p>
           </div>
           <StatusBadge enabled={stripeEnabled} />
-        </Card>
-        <Card className="p-4 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-[#003087]/10 flex items-center justify-center font-extrabold text-lg">
-            <span style={{ color: '#003087' }}>P</span>
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold text-[#0a1628]">PayPal</p>
-            <p className="text-xs text-gray-400">PayPal account &amp; cards</p>
-          </div>
-          <StatusBadge enabled={paypalEnabled} />
         </Card>
       </div>
 
@@ -182,60 +171,6 @@ export default function Payments() {
         </Card>
       )}
 
-      {/* ── PayPal ── */}
-      {tab === 'PayPal' && (
-        <Card className="p-6 space-y-6">
-          <Toggle
-            checked={paypalEnabled}
-            onChange={v => set('paypal_enabled', v ? 'true' : 'false')}
-            label="Enable PayPal"
-            description="Let customers pay via PayPal account or card"
-          />
-
-          {paypalEnabled && (
-            <>
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                <div>
-                  Get credentials from{' '}
-                  <a href="https://developer.paypal.com/dashboard/applications" target="_blank" rel="noreferrer" className="underline font-medium">
-                    developer.paypal.com
-                  </a>. Use <strong>Sandbox</strong> for testing.
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className="text-sm font-medium text-[#0a1628] block mb-2">Mode</label>
-                  <div className="flex gap-3">
-                    {['sandbox', 'live'].map(m => (
-                      <label key={m} className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="paypal_mode" value={m} checked={cfg.paypal_mode === m} onChange={handleChange} className="accent-[#1bb0ce]" />
-                        <span className="text-sm capitalize font-medium text-[#0a1628]">{m}</span>
-                        {m === 'sandbox' && <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full border border-yellow-200">testing</span>}
-                        {m === 'live'    && <span className="text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">production</span>}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-[#0a1628] block mb-1">Client ID</label>
-                  <input
-                    name="paypal_client_id"
-                    value={cfg.paypal_client_id || ''}
-                    onChange={handleChange}
-                    placeholder="AaBbCcDd…"
-                    className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#1bb0ce] font-mono"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Used in the browser to load the PayPal button. Safe to expose.</p>
-                </div>
-                <MaskedInput label="Client Secret" name="paypal_client_secret" value={cfg.paypal_client_secret || ''} onChange={handleChange} placeholder="EeFfGgHh…" hint="Server-side only. Never exposed to the browser." />
-              </div>
-            </>
-          )}
-        </Card>
-      )}
-
       {/* ── General ── */}
       {tab === 'General' && (
         <Card className="p-6 space-y-5">
@@ -251,7 +186,7 @@ export default function Payments() {
                 <option key={v} value={v}>{l}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1">Must match your Stripe and PayPal account currency settings.</p>
+            <p className="text-xs text-gray-400 mt-1">Must match your Stripe account currency settings.</p>
           </div>
         </Card>
       )}

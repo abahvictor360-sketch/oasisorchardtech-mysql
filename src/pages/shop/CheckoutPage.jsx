@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Home, ChevronRight, Lock } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
-import { PayPalScriptProvider } from '@paypal/react-paypal-js';
 import { useCart } from '../../context/CartContext';
 import { useApp } from '../../context/AppContext';
 import { payments as paymentsApi, orders as ordersApi } from '../../lib/api';
@@ -56,10 +55,7 @@ export default function CheckoutPage() {
     paymentsApi.config().then(({ data }) => {
       if (data) {
         setPayConfig(data);
-        // Default to first available gateway (wallet/pay-later removed)
-        if (data.stripe_enabled) setPaymentMethod('stripe');
-        else if (data.paypal_enabled) setPaymentMethod('paypal');
-        else setPaymentMethod(null);
+        setPaymentMethod(data.stripe_enabled ? 'stripe' : null);
       }
     });
   }, []);
@@ -68,7 +64,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (paymentMethod === 'stripe' && payConfig?.stripe_enabled && !clientSecret && cartTotal > 0) {
       paymentsApi.createStripeIntent({ total: cartTotal }).then(({ data, error }) => {
-        if (error) { addToast('Could not load payment form. Try PayPal.', 'error'); return; }
+        if (error) { addToast('Could not load payment form. Please try again.', 'error'); return; }
         setClientSecret(data.clientSecret);
         setIntentId(data.intentId);
       });
@@ -80,11 +76,7 @@ export default function CheckoutPage() {
     if (cartItems.length === 0 && !placing) navigate('/cart', { replace: true });
   }, [cartItems, placing, navigate]);
 
-  // ── Method change: reset intent if switching away from stripe ─
-  const handleMethodChange = (m) => {
-    if (m !== 'stripe') { setClientSecret(null); setIntentId(null); }
-    setPaymentMethod(m);
-  };
+  const handleMethodChange = (m) => setPaymentMethod(m);
 
   // ── Build order payload ───────────────────────────────────────
   const buildOrder = useCallback((extraFields = {}) => ({
@@ -96,7 +88,7 @@ export default function CheckoutPage() {
     ...extraFields,
   }), [cartItems, cartTotal, paymentMethod, formData]);
 
-  // ── Place order (Stripe — PayPal uses its own buttons) ────────
+  // ── Place order (Stripe) ──────────────────────────────────────
   const handlePlaceOrder = async () => {
     const errs = validateForm(formData);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
@@ -126,28 +118,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // ── PayPal callbacks ──────────────────────────────────────────
-  const handlePayPalCreate = async () => {
-    const errs = validateForm(formData);
-    if (Object.keys(errs).length > 0) { setErrors(errs); throw new Error('Fill in shipping details first.'); }
-    const { data, error } = await paymentsApi.createPaypalOrder({ total: cartTotal });
-    if (error) throw new Error(error.message);
-    return data.paypalOrderId;
-  };
-
-  const handlePayPalApprove = async (data) => {
-    setPlacing(true);
-    try {
-      const { data: order } = await ordersApi.create(buildOrder());
-      await paymentsApi.capturePaypal({ paypalOrderId: data.orderID, orderId: order?.id });
-      clearCart();
-      navigate('/order-success', { state: { orderId: order?.id, total: cartTotal, itemCount: cartCount } });
-    } catch (e) {
-      addToast('PayPal payment failed. ' + e.message, 'error');
-      setPlacing(false);
-    }
-  };
-
   // ── Stripe Elements appearance ────────────────────────────────
   const stripeOptions = useMemo(() => ({
     clientSecret,
@@ -157,7 +127,6 @@ export default function CheckoutPage() {
     },
   }), [clientSecret]);
 
-  // Place Order button only applies to Stripe (PayPal has its own buttons)
   const showPlaceOrderBtn = paymentMethod === 'stripe';
 
   // ── Render ────────────────────────────────────────────────────
@@ -166,14 +135,10 @@ export default function CheckoutPage() {
       method={paymentMethod}
       onMethodChange={handleMethodChange}
       stripeEnabled={!!payConfig?.stripe_enabled}
-      paypalEnabled={!!payConfig?.paypal_enabled}
       clientSecretReady={!!clientSecret}
       stripeFormRef={stripeFormRef}
       onStripeError={(msg) => addToast(msg, 'error')}
       onStripeSuccess={() => {}}
-      onPayPalCreate={handlePayPalCreate}
-      onPayPalApprove={handlePayPalApprove}
-      onPayPalError={(msg) => addToast(msg, 'error')}
     />
   );
 
@@ -212,20 +177,7 @@ export default function CheckoutPage() {
                 Payment Method
               </h2>
 
-              {/* Wrap with providers based on available methods */}
-              {payConfig?.paypal_enabled ? (
-                <PayPalScriptProvider options={{
-                  'client-id': payConfig.paypal_client_id,
-                  currency:    (payConfig.currency || 'CAD'),
-                  intent:      'capture',
-                }}>
-                  {payConfig?.stripe_enabled && clientSecret ? (
-                    <Elements stripe={stripePromise} options={stripeOptions}>
-                      {paymentPanel}
-                    </Elements>
-                  ) : paymentPanel}
-                </PayPalScriptProvider>
-              ) : payConfig?.stripe_enabled && clientSecret ? (
+              {payConfig?.stripe_enabled && clientSecret ? (
                 <Elements stripe={stripePromise} options={stripeOptions}>
                   {paymentPanel}
                 </Elements>

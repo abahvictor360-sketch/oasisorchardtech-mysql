@@ -19,11 +19,17 @@ for ($lvl = 1; $lvl <= 6; $lvl++) {
 }
 
 // Fallbacks for local development (no secrets committed here)
-if (!defined('DB_HOST'))  define('DB_HOST', 'localhost');
-if (!defined('DB_NAME'))  define('DB_NAME', '');
-if (!defined('DB_USER'))  define('DB_USER', '');
-if (!defined('DB_PASS'))  define('DB_PASS', '');
-if (!defined('SITE_URL')) define('SITE_URL', 'https://yourdomain.com');
+if (!defined('DB_HOST'))    define('DB_HOST',    'localhost');
+if (!defined('DB_NAME'))    define('DB_NAME',    '');
+if (!defined('DB_USER'))    define('DB_USER',    '');
+if (!defined('DB_PASS'))    define('DB_PASS',    '');
+if (!defined('SITE_URL'))   define('SITE_URL',   'https://oasisorchardtech.com');
+// SMTP — set real values in oasis-config.php (outside public_html)
+if (!defined('SMTP_HOST'))  define('SMTP_HOST',  'smtp.hostinger.com');
+if (!defined('SMTP_PORT'))  define('SMTP_PORT',  587);
+if (!defined('SMTP_USER'))  define('SMTP_USER',  '');
+if (!defined('SMTP_PASS'))  define('SMTP_PASS',  '');
+if (!defined('SMTP_FROM'))  define('SMTP_FROM',  'info@oasisorchardtech.com');
 
 // ── CORS ───────────────────────────────────────────────────────
 $allowed = ['http://localhost:5173', SITE_URL];

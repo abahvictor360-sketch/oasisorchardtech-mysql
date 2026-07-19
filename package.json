@@ -7,20 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "powershell -ExecutionPolicy Bypass -File deploy.ps1"
   },
   "dependencies": {
-    "@paypal/react-paypal-js": "^10.1.1",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/supabase-js": "^2.106.1",
+    "jssip": "^3.10.1",
     "lucide-react": "^1.16.0",
     "motion": "^12.42.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-helmet-async": "^3.0.0",
     "react-router-dom": "^7.15.1",
-    "jssip": "^3.10.1",
     "recharts": "^3.8.1"
   },
   "devDependencies": {

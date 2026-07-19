@@ -66,8 +66,8 @@ export default function Privacy() {
 
             <Section number={3} title="Payment Information">
               <p>
-                All payments are processed by Stripe and/or PayPal, both PCI-DSS compliant payment
-                processors. Your card details are sent directly to these providers and are never
+                All payments are processed by Stripe, a PCI-DSS compliant payment
+                processor. Your card details are sent directly to Stripe and are never
                 stored on our servers. We only retain the payment status and a transaction reference
                 needed to fulfill and support your order.
               </p>
@@ -84,7 +84,7 @@ export default function Privacy() {
             <Section number={5} title="Sharing Your Information">
               <p>We do not sell your personal information. We share information only with:</p>
               <ul className="list-disc list-inside space-y-1.5">
-                <li>Payment processors (Stripe, PayPal) to complete transactions</li>
+                <li>Our payment processor (Stripe) to complete transactions</li>
                 <li>Shipping carriers to deliver your order</li>
                 <li>Service providers that help us operate the site (e.g., hosting, email/WhatsApp delivery for notifications you or we enable)</li>
                 <li>Law enforcement or regulators, only where required by law</li>

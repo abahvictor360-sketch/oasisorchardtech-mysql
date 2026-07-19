@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Bell, Mail, MessageCircle, Save, Send, Eye, EyeOff, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Bell, Mail, MessageCircle, Server, Save, Send, Eye, EyeOff, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
+import { smtp as smtpApi } from '../../lib/api';
 
 const BASE = '/api';
 
@@ -18,8 +19,9 @@ async function apiReq(path, options = {}) {
   return { data: text ? JSON.parse(text) : null, ok: res.ok };
 }
 
-const TABS = ['Email', 'WhatsApp'];
+const TABS = ['SMTP', 'Email', 'WhatsApp'];
 
+// ── Shared UI ─────────────────────────────────────────────────────
 function Toggle({ checked, onChange, label, description }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer">
@@ -36,11 +38,20 @@ function Toggle({ checked, onChange, label, description }) {
   );
 }
 
+function Field({ label, hint, children }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-sm font-medium text-[#0a1628]">{label}</label>}
+      {children}
+      {hint && <p className="text-xs text-gray-400">{hint}</p>}
+    </div>
+  );
+}
+
 function MaskedInput({ label, name, value, onChange, placeholder, hint }) {
   const [show, setShow] = useState(false);
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-[#0a1628]">{label}</label>
+    <Field label={label} hint={hint}>
       <div className="relative">
         <input
           type={show ? 'text' : 'password'}
@@ -54,24 +65,171 @@ function MaskedInput({ label, name, value, onChange, placeholder, hint }) {
           {show ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
-      {hint && <p className="text-xs text-gray-400">{hint}</p>}
-    </div>
+    </Field>
   );
 }
 
 const inputCls = 'w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#1bb0ce] focus:ring-1 focus:ring-[#1bb0ce]';
 
-export default function Notifications() {
-  const { addToast } = useApp();
-  const [tab,      setTab]      = useState('Email');
-  const [cfg,      setCfg]      = useState({});
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
-  const [testing,  setTesting]  = useState(false);
+// ── SMTP Tab ──────────────────────────────────────────────────────
+function SmtpTab({ addToast }) {
+  const [cfg,     setCfg]     = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
 
   useEffect(() => {
-    apiReq('/notifications/settings').then(({ data }) => {
+    smtpApi.getSettings().then(({ data }) => {
       if (data) setCfg(data);
+      setLoading(false);
+    });
+  }, []);
+
+  const set = (key, val) => setCfg(p => ({ ...p, [key]: val }));
+  const handleChange = e => set(e.target.name, e.target.value);
+  const enabled = cfg.smtp_enabled === 'true' || cfg.smtp_enabled === true;
+
+  const save = async () => {
+    setSaving(true);
+    const { ok, data } = await smtpApi.saveSettings({ ...cfg, smtp_enabled: enabled ? 'true' : 'false' });
+    if (ok) { setCfg(data); addToast('SMTP settings saved', 'success'); }
+    else     addToast('Save failed', 'error');
+    setSaving(false);
+  };
+
+  const sendTest = async () => {
+    if (!testEmail) { addToast('Enter a test email address first', 'error'); return; }
+    setTesting(true);
+    const { ok, data } = await smtpApi.test(testEmail);
+    if (ok && data?.sent) {
+      addToast(`Test email sent to ${testEmail}! Check your inbox (and spam folder).`, 'success');
+    } else {
+      const reason = data?.error || 'Unknown error — check PHP error logs.';
+      addToast(`Failed: ${reason}`, 'error');
+    }
+    setTesting(false);
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><Spinner /></div>;
+
+  const port = cfg.smtp_port || '587';
+  const secure = cfg.smtp_secure || 'tls';
+
+  return (
+    <Card className="p-6 space-y-6">
+      <div>
+        <h3 className="font-bold text-[#0a1628] mb-1">SMTP Email Server</h3>
+        <p className="text-sm text-gray-400">Configure your outgoing mail server. This powers all emails: order confirmations, email verification, and password resets.</p>
+      </div>
+
+      <Toggle
+        checked={enabled}
+        onChange={v => set('smtp_enabled', v ? 'true' : 'false')}
+        label="Enable SMTP Email"
+        description="When off, no emails are sent from the website"
+      />
+
+      {enabled && (
+        <>
+          {/* Hostinger preset banner */}
+          <div className="bg-[#f0fbff] border border-[#b3e8f5] rounded-xl p-4 flex gap-3">
+            <Info size={16} className="text-[#1bb0ce] shrink-0 mt-0.5" />
+            <div className="text-sm text-[#0a1628]">
+              <strong>Using Hostinger?</strong> Use <code className="bg-[#dff4fa] px-1 rounded">smtp.hostinger.com</code> port <code className="bg-[#dff4fa] px-1 rounded">587</code> with your Hostinger email address and password.
+            </div>
+          </div>
+
+          {/* Host + Port row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Field label="SMTP Host" hint="e.g. smtp.hostinger.com or smtp.gmail.com">
+              <input name="smtp_host" value={cfg.smtp_host || ''} onChange={handleChange} placeholder="smtp.hostinger.com" className={inputCls} />
+            </Field>
+            <Field label="Port">
+              <select name="smtp_port" value={port} onChange={handleChange} className={inputCls}>
+                <option value="587">587 — STARTTLS (recommended)</option>
+                <option value="465">465 — SSL</option>
+                <option value="25">25 — Plain (no encryption)</option>
+              </select>
+            </Field>
+            <Field label="Encryption">
+              <select name="smtp_secure" value={secure} onChange={handleChange} className={inputCls}>
+                <option value="tls">TLS / STARTTLS</option>
+                <option value="ssl">SSL</option>
+              </select>
+            </Field>
+          </div>
+
+          {/* Credentials */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="SMTP Username (Email)" hint="Usually your full email address">
+              <input name="smtp_user" value={cfg.smtp_user || ''} onChange={handleChange} placeholder="info@oasisorchardtech.com" className={inputCls} />
+            </Field>
+            <MaskedInput
+              label="SMTP Password"
+              name="smtp_pass"
+              value={cfg.smtp_pass || ''}
+              onChange={handleChange}
+              placeholder="Your email account password"
+              hint="Stored securely on the server, never exposed to the browser"
+            />
+          </div>
+
+          {/* From */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="From Email" hint="Must match your SMTP username on most providers">
+              <input name="smtp_from" value={cfg.smtp_from || ''} onChange={handleChange} placeholder="info@oasisorchardtech.com" className={inputCls} />
+            </Field>
+            <Field label="From Name">
+              <input name="smtp_from_name" value={cfg.smtp_from_name || ''} onChange={handleChange} placeholder="Oasis Orchard Technologies" className={inputCls} />
+            </Field>
+          </div>
+
+          {/* Test */}
+          <div className="border-t border-gray-100 pt-5">
+            <p className="text-sm font-semibold text-[#0a1628] mb-3">Send a test email</p>
+            <div className="flex gap-3">
+              <input
+                type="email"
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                placeholder="your@email.com"
+                className={`${inputCls} max-w-xs`}
+              />
+              <Button variant="outline" onClick={sendTest} disabled={testing} className="gap-2 shrink-0">
+                {testing ? <Spinner size="sm" /> : <Send size={14} />}
+                Send Test
+              </Button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Save settings first, then send a test to verify the connection works.</p>
+          </div>
+        </>
+      )}
+
+      <Button variant="primary" onClick={save} disabled={saving} className="gap-2">
+        {saving ? <><Spinner size="sm" color="white" />Saving…</> : <><Save size={16} />Save SMTP Settings</>}
+      </Button>
+    </Card>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────
+export default function Notifications() {
+  const { addToast } = useApp();
+  const [tab,     setTab]     = useState('SMTP');
+  const [cfg,     setCfg]     = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [smtpStatus, setSmtpStatus] = useState(null);
+
+  useEffect(() => {
+    Promise.all([
+      apiReq('/notifications/settings'),
+      smtpApi.getSettings(),
+    ]).then(([notif, smtpRes]) => {
+      if (notif.data)    setCfg(notif.data);
+      if (smtpRes.data)  setSmtpStatus(smtpRes.data.smtp_enabled);
       setLoading(false);
     });
   }, []);
@@ -94,15 +252,16 @@ export default function Notifications() {
       body: { type, email: cfg.admin_email },
     });
     if (ok && data?.sent) addToast(`Test ${type} sent! Check your ${type === 'email' ? 'inbox' : 'WhatsApp'}.`, 'success');
-    else addToast('Test failed — check your settings and try again.', 'error');
+    else addToast('Test failed — check your SMTP settings and try again.', 'error');
     setTesting(false);
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Spinner /></div>;
 
-  const emailEnabled     = cfg.email_enabled     === 'true';
-  const whatsappEnabled  = cfg.whatsapp_enabled  === 'true';
-  const provider         = cfg.whatsapp_provider || 'callmebot';
+  const emailEnabled    = cfg.email_enabled    === 'true';
+  const whatsappEnabled = cfg.whatsapp_enabled === 'true';
+  const provider        = cfg.whatsapp_provider || 'callmebot';
+  const smtpOn          = smtpStatus === 'true' || smtpStatus === true;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -112,32 +271,42 @@ export default function Notifications() {
           <Bell size={20} className="text-[#1bb0ce]" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-[#0a1628]">Order Notifications</h2>
-          <p className="text-sm text-gray-400">Get notified on email and WhatsApp every time a customer places an order</p>
+          <h2 className="text-lg font-bold text-[#0a1628]">Notifications & Email</h2>
+          <p className="text-sm text-gray-400">Configure SMTP and get notified when orders are placed</p>
         </div>
       </div>
 
-      {/* Status overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Status cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center"><Server size={18} className="text-purple-500" /></div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[#0a1628] text-sm">SMTP</p>
+            <p className="text-xs text-gray-400 truncate">{smtpOn ? 'Configured' : 'Not enabled'}</p>
+          </div>
+          {smtpOn
+            ? <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full shrink-0"><CheckCircle size={11} />On</span>
+            : <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full shrink-0">Off</span>}
+        </Card>
         <Card className="p-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Mail size={18} className="text-blue-500" /></div>
-          <div className="flex-1">
-            <p className="font-semibold text-[#0a1628] text-sm">Email</p>
-            <p className="text-xs text-gray-400">{cfg.admin_email || 'Not configured'}</p>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[#0a1628] text-sm">Email Alerts</p>
+            <p className="text-xs text-gray-400 truncate">{cfg.admin_email || 'Not configured'}</p>
           </div>
           {emailEnabled
-            ? <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full"><CheckCircle size={11} />On</span>
-            : <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">Off</span>}
+            ? <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full shrink-0"><CheckCircle size={11} />On</span>
+            : <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full shrink-0">Off</span>}
         </Card>
         <Card className="p-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><MessageCircle size={18} className="text-green-500" /></div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="font-semibold text-[#0a1628] text-sm">WhatsApp</p>
-            <p className="text-xs text-gray-400">{cfg.whatsapp_phone || 'Not configured'} {cfg.whatsapp_provider ? `· ${cfg.whatsapp_provider}` : ''}</p>
+            <p className="text-xs text-gray-400 truncate">{cfg.whatsapp_phone || 'Not configured'}</p>
           </div>
           {whatsappEnabled
-            ? <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full"><CheckCircle size={11} />On</span>
-            : <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">Off</span>}
+            ? <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-2.5 py-1 rounded-full shrink-0"><CheckCircle size={11} />On</span>
+            : <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full shrink-0">Off</span>}
         </Card>
       </div>
 
@@ -146,19 +315,37 @@ export default function Notifications() {
         {TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={['px-4 py-2 rounded-lg text-sm font-medium transition-all', tab === t ? 'bg-white text-[#0a1628] shadow-sm' : 'text-gray-500 hover:text-gray-700'].join(' ')}>
+            {t === 'SMTP' && <Server size={13} className="inline mr-1.5 mb-0.5" />}
+            {t === 'Email' && <Mail size={13} className="inline mr-1.5 mb-0.5" />}
+            {t === 'WhatsApp' && <MessageCircle size={13} className="inline mr-1.5 mb-0.5" />}
             {t}
           </button>
         ))}
       </div>
 
-      {/* ── Email tab ── */}
+      {/* ── SMTP tab ── */}
+      {tab === 'SMTP' && <SmtpTab addToast={addToast} />}
+
+      {/* ── Email notifications tab ── */}
       {tab === 'Email' && (
         <Card className="p-6 space-y-5">
+          <div>
+            <h3 className="font-bold text-[#0a1628] mb-1">Order Email Alerts</h3>
+            <p className="text-sm text-gray-400">Receive an email every time a customer places an order. Requires SMTP to be configured.</p>
+          </div>
+
+          {!smtpOn && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex gap-3 text-sm text-yellow-800">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <div>SMTP is not enabled. Go to the <button className="font-semibold underline" onClick={() => setTab('SMTP')}>SMTP tab</button> to configure it first.</div>
+            </div>
+          )}
+
           <Toggle
             checked={emailEnabled}
             onChange={v => set('email_enabled', v ? 'true' : 'false')}
-            label="Enable Email Notifications"
-            description="Receive an HTML email summary every time an order is placed"
+            label="Enable Admin Order Emails"
+            description="Send an HTML order summary to the admin email below"
           />
 
           {emailEnabled && (
@@ -173,34 +360,30 @@ export default function Notifications() {
                   placeholder="admin@yourdomain.com"
                   className={inputCls}
                 />
-                <p className="text-xs text-gray-400 mt-1">Order notification emails will be sent to this address.</p>
+                <p className="text-xs text-gray-400 mt-1">New order notifications will be sent to this address.</p>
               </div>
 
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800 flex gap-3">
-                <AlertTriangle size={15} className="shrink-0 mt-0.5" />
-                <div>
-                  Emails are sent via your server's <code className="bg-blue-100 px-1 rounded">mail()</code> function.
-                  To avoid spam, set up SPF and DKIM records for your domain in Hostinger's DNS settings.
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={() => sendTest('email')}
-                disabled={testing || !cfg.admin_email}
-                className="gap-2"
-              >
+              <Button variant="outline" onClick={() => sendTest('email')} disabled={testing || !cfg.admin_email || !smtpOn} className="gap-2">
                 {testing ? <Spinner size="sm" /> : <Send size={14} />}
-                Send Test Email
+                Send Test Order Email
               </Button>
             </>
           )}
+
+          <Button variant="primary" onClick={save} disabled={saving} className="gap-2">
+            {saving ? <><Spinner size="sm" color="white" />Saving…</> : <><Save size={16} />Save</>}
+          </Button>
         </Card>
       )}
 
       {/* ── WhatsApp tab ── */}
       {tab === 'WhatsApp' && (
         <Card className="p-6 space-y-5">
+          <div>
+            <h3 className="font-bold text-[#0a1628] mb-1">WhatsApp Alerts</h3>
+            <p className="text-sm text-gray-400">Receive a WhatsApp message every time a customer places an order.</p>
+          </div>
+
           <Toggle
             checked={whatsappEnabled}
             onChange={v => set('whatsapp_enabled', v ? 'true' : 'false')}
@@ -212,13 +395,7 @@ export default function Notifications() {
             <>
               <div>
                 <label className="text-sm font-medium text-[#0a1628] block mb-1">Your WhatsApp Number</label>
-                <input
-                  name="whatsapp_phone"
-                  value={cfg.whatsapp_phone || ''}
-                  onChange={handleChange}
-                  placeholder="+1234567890"
-                  className={inputCls}
-                />
+                <input name="whatsapp_phone" value={cfg.whatsapp_phone || ''} onChange={handleChange} placeholder="+1234567890" className={inputCls} />
                 <p className="text-xs text-gray-400 mt-1">Include country code, e.g. +1 for Canada/USA.</p>
               </div>
 
@@ -226,9 +403,9 @@ export default function Notifications() {
                 <label className="text-sm font-medium text-[#0a1628] block mb-2">Provider</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
-                    { id: 'callmebot', name: 'CallMeBot', badge: 'Free', color: 'text-green-700 bg-green-50 border-green-200' },
-                    { id: 'ultramsg',  name: 'UltraMsg',  badge: 'Paid', color: 'text-blue-700 bg-blue-50 border-blue-200' },
-                    { id: 'twilio',    name: 'Twilio',    badge: 'Paid', color: 'text-purple-700 bg-purple-50 border-purple-200' },
+                    { id: 'callmebot', name: 'CallMeBot', badge: 'Free',  color: 'text-green-700 bg-green-50 border-green-200' },
+                    { id: 'ultramsg',  name: 'UltraMsg',  badge: 'Paid',  color: 'text-blue-700 bg-blue-50 border-blue-200' },
+                    { id: 'twilio',    name: 'Twilio',    badge: 'Paid',  color: 'text-purple-700 bg-purple-50 border-purple-200' },
                   ].map(p => (
                     <label key={p.id} className={['flex flex-col gap-1.5 p-3 rounded-xl border-2 cursor-pointer transition-all', provider === p.id ? 'border-[#1bb0ce] bg-[#e0f7fb]' : 'border-gray-200 hover:border-gray-300'].join(' ')}>
                       <input type="radio" name="whatsapp_provider" value={p.id} checked={provider === p.id} onChange={handleChange} className="sr-only" />
@@ -239,7 +416,6 @@ export default function Notifications() {
                 </div>
               </div>
 
-              {/* CallMeBot fields */}
               {provider === 'callmebot' && (
                 <div className="space-y-4">
                   <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800 space-y-2">
@@ -254,7 +430,6 @@ export default function Notifications() {
                 </div>
               )}
 
-              {/* UltraMsg fields */}
               {provider === 'ultramsg' && (
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800">
@@ -268,12 +443,10 @@ export default function Notifications() {
                 </div>
               )}
 
-              {/* Twilio fields */}
               {provider === 'twilio' && (
                 <div className="space-y-4">
                   <div className="bg-purple-50 border border-purple-100 rounded-xl p-4 text-sm text-purple-800">
-                    Use your existing Twilio account. The <strong>WhatsApp Sandbox</strong> sender is <code>whatsapp:+14155238886</code> for testing.
-                    For production, get an approved WhatsApp Business number from Twilio.
+                    Use your Twilio account. The WhatsApp Sandbox sender is <code>whatsapp:+14155238886</code> for testing.
                   </div>
                   <div>
                     <label className="text-sm font-medium text-[#0a1628] block mb-1">Account SID</label>
@@ -288,24 +461,18 @@ export default function Notifications() {
                 </div>
               )}
 
-              <Button
-                variant="outline"
-                onClick={() => sendTest('whatsapp')}
-                disabled={testing || !cfg.whatsapp_phone}
-                className="gap-2"
-              >
+              <Button variant="outline" onClick={() => sendTest('whatsapp')} disabled={testing || !cfg.whatsapp_phone} className="gap-2">
                 {testing ? <Spinner size="sm" /> : <Send size={14} />}
                 Send Test WhatsApp
               </Button>
             </>
           )}
+
+          <Button variant="primary" onClick={save} disabled={saving} className="gap-2">
+            {saving ? <><Spinner size="sm" color="white" />Saving…</> : <><Save size={16} />Save</>}
+          </Button>
         </Card>
       )}
-
-      {/* Save */}
-      <Button variant="primary" onClick={save} disabled={saving} className="w-full sm:w-auto px-8">
-        {saving ? <><Spinner size="sm" color="white" />Saving…</> : <><Save size={16} />Save Settings</>}
-      </Button>
     </div>
   );
 }

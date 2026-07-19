@@ -18,6 +18,7 @@ import {
   BellRing,
   Tag,
   KeyRound,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -33,6 +34,7 @@ const navItems = [
   { label: 'Phone Calls', icon: Phone,           to: '/admin/voip' },
   { label: 'Support',   icon: MessageSquare,    to: '/admin/support' },
   { label: 'Notifications', icon: BellRing,       to: '/admin/notifications' },
+  { label: 'Email Templates', icon: Mail,         to: '/admin/email-templates' },
   { label: 'Content',   icon: FileEdit,         to: '/admin/content' },
   { label: 'Account',   icon: KeyRound,         to: '/admin/account' },
 ];

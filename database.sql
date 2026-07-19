@@ -20,11 +20,15 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS users (
-  id            VARCHAR(36)  PRIMARY KEY,
-  email         VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  role          VARCHAR(50)  NOT NULL DEFAULT 'user',
-  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+  id                   VARCHAR(36)  PRIMARY KEY,
+  email                VARCHAR(255) UNIQUE NOT NULL,
+  password_hash        VARCHAR(255) NOT NULL,
+  role                 VARCHAR(50)  NOT NULL DEFAULT 'user',
+  email_verified       TINYINT(1)   NOT NULL DEFAULT 0,
+  email_verify_token   VARCHAR(64)  DEFAULT NULL,
+  reset_token          VARCHAR(64)  DEFAULT NULL,
+  reset_token_expires  DATETIME     DEFAULT NULL,
+  created_at           TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -179,6 +183,24 @@ CREATE TABLE IF NOT EXISTS notification_settings (
   updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS smtp_settings (
+  `key`      VARCHAR(100) NOT NULL PRIMARY KEY,
+  `value`    TEXT         NOT NULL DEFAULT '',
+  updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS email_templates (
+  id         VARCHAR(80)  NOT NULL PRIMARY KEY,
+  name       VARCHAR(100) NOT NULL,
+  subject    VARCHAR(255) NOT NULL,
+  body_html  LONGTEXT     NOT NULL,
+  variables  TEXT         DEFAULT NULL,
+  is_active  TINYINT(1)   NOT NULL DEFAULT 1,
+  is_system  TINYINT(1)   NOT NULL DEFAULT 0,
+  created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- ════════════════════════════════════════════════════════════════
 -- 6. SUPPORT TICKETS
 -- ════════════════════════════════════════════════════════════════
@@ -329,4 +351,16 @@ INSERT INTO notification_settings (`key`, `value`) VALUES
   ('whatsapp_sid',       ''),
   ('whatsapp_secret',    ''),
   ('whatsapp_from',      'whatsapp:+14155238886')
+ON DUPLICATE KEY UPDATE `key` = `key`;
+
+-- ── SMTP defaults ─────────────────────────────────────────────
+INSERT INTO smtp_settings (`key`, `value`) VALUES
+  ('smtp_enabled',   'false'),
+  ('smtp_host',      'smtp.hostinger.com'),
+  ('smtp_port',      '587'),
+  ('smtp_secure',    'tls'),
+  ('smtp_user',      ''),
+  ('smtp_pass',      ''),
+  ('smtp_from',      ''),
+  ('smtp_from_name', 'Oasis Orchard Technologies')
 ON DUPLICATE KEY UPDATE `key` = `key`;
