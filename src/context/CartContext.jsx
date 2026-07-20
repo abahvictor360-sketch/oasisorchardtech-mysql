@@ -4,7 +4,7 @@ const CartContext = createContext(null);
 
 const SHIPPING_THRESHOLD = 100;
 const SHIPPING_COST = 9.99;
-const TAX_RATE = 0.08;
+const TAX_RATE = 0; // tax disabled for now — set back to 0.08 to re-enable
 
 const COUPONS = {
   'OASIS10': { type: 'percent', value: 10, label: '10% off' }

@@ -48,10 +48,12 @@ export default function CartSummary() {
           </p>
         )}
 
-        <div className="flex justify-between text-gray-600">
-          <span>Tax (8%)</span>
-          <span className="font-mono-num font-medium text-[#0a1628]">{formatCurrency(tax)}</span>
-        </div>
+        {tax > 0 && (
+          <div className="flex justify-between text-gray-600">
+            <span>Tax (8%)</span>
+            <span className="font-mono-num font-medium text-[#0a1628]">{formatCurrency(tax)}</span>
+          </div>
+        )}
       </div>
 
       {/* Divider */}
