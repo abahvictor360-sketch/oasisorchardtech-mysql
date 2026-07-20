@@ -370,6 +370,40 @@ function stripe_curl($pdo, $endpoint, $data = [], $httpMethod = 'POST') {
             'error' => ($decoded['error']['message'] ?? null)];
 }
 
+// ── VoIP.ms REST call via cURL (allow_url_fopen is often disabled on shared hosts) ─
+function voipms_call($apiUser, $apiPass, $method, array $params = []) {
+    $url = 'https://voip.ms/api/v1/rest.php?' . http_build_query(array_merge($params, [
+        'api_username' => $apiUser,
+        'api_password' => $apiPass,
+        'method'       => $method,
+    ]));
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    if ($raw === false) return null;
+    return json_decode($raw, true);
+}
+
+// Map common VoIP.ms error statuses to an actionable hint for the admin
+function voipms_error_hint($status) {
+    switch ($status) {
+        case 'ip_not_enabled':
+            return ' — your server IP is not whitelisted. Log in to voip.ms → Main Menu → API → add this server\'s IP to "Allowed IPs".';
+        case 'invalid_credentials':
+        case 'missing_credentials':
+            return ' — check the API username/password saved in Admin → VoIP → Provider Setup (the API password is NOT your voip.ms login password).';
+        case 'api_not_enabled':
+            return ' — enable the API at voip.ms → Main Menu → API.';
+        default:
+            return '';
+    }
+}
+
 function make_order_id() {
     return 'ORD-' . strtoupper(substr(bin2hex(random_bytes(6)), 0, 10));
 }
@@ -1295,20 +1329,13 @@ case 'voipms':
 
     if (!$method || !in_array($method, $allowed, true)) err('Method not allowed', 403);
 
-    // Build params — strip our internal keys, inject voip.ms auth
+    // Build params — strip our internal keys (auth is injected by voipms_call)
     $params = $_GET;
     unset($params['method'], $params['all']); // clean up
-    $params['api_username'] = $cfg['voipms_api_user'];
-    $params['api_password'] = $cfg['voipms_api_pass'];
-    $params['method']       = $method;
 
-    $url = 'https://voip.ms/api/v1/rest.php?' . http_build_query($params);
-    $ctx = stream_context_create(['http' => ['timeout' => 15, 'ignore_errors' => true]]);
-    $raw = @file_get_contents($url, false, $ctx);
-    if ($raw === false) err('VoIP.ms API unreachable', 502);
-
-    $resp = json_decode($raw, true);
-    send($resp ?? ['status' => 'error', 'error' => 'Invalid response from VoIP.ms']);
+    $resp = voipms_call($cfg['voipms_api_user'], $cfg['voipms_api_pass'], $method, $params);
+    if ($resp === null) err('VoIP.ms API unreachable', 502);
+    send($resp);
     break;
 
 // ═══ VOIP.MS SUB-ACCOUNT PROVISIONING ════════════════════════════
@@ -1330,71 +1357,64 @@ case 'provision':
     $short   = preg_replace('/[^a-z0-9]/', '', strtolower(substr($target_uid, 0, 12)));
     $subname = 'u' . $short;
 
-    // Generate secure SIP password
-    $sipPass = substr(str_replace(['/', '+', '='], '', base64_encode(random_bytes(12))), 0, 12) . '@1';
+    // Generate SIP password — VoIP.ms wants 8-16 chars, letters + numbers
+    // (special characters can be rejected, so stay strictly alphanumeric)
+    $chars   = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ';
+    $sipPass = '';
+    for ($i = 0; $i < 8; $i++) $sipPass .= $chars[random_int(0, strlen($chars) - 1)];
+    $sipPass .= (string)random_int(1000, 9999); // guarantees digits; 12 chars total
 
     $apiUser = $cfg['voipms_api_user'];
     $apiPass = $cfg['voipms_api_pass'];
     $server  = $cfg['voipms_server'] ?? 'webrtc.voip.ms';
 
-    // Check if sub-account already exists (VoIP.ms method is getSubAccounts, plural)
-    $ctx  = stream_context_create(['http' => ['timeout' => 15, 'ignore_errors' => true]]);
-    $listUrl = 'https://voip.ms/api/v1/rest.php?' . http_build_query([
-        'api_username' => $apiUser,
-        'api_password' => $apiPass,
-        'method'       => 'getSubAccounts',
-    ]);
-    $list = json_decode(@file_get_contents($listUrl, false, $ctx), true);
-
-    $sipUsername = null;
-    if ($list && ($list['status'] ?? '') === 'success') {
+    // Helper: find our sub-account in a getSubAccounts response ("<mainaccount>_<subname>")
+    $findSub = function ($list) use ($subname) {
         foreach (($list['accounts'] ?? []) as $a) {
             $acct = $a['account'] ?? '';
-            // Full account names are "<mainaccount>_<subname>"
-            if ($acct !== '' && substr($acct, -strlen('_' . $subname)) === '_' . $subname) {
-                $sipUsername = $acct;
-                break;
-            }
+            if ($acct !== '' && substr($acct, -strlen('_' . $subname)) === '_' . $subname) return $acct;
         }
+        return null;
+    };
+
+    // Check if sub-account already exists
+    $list = voipms_call($apiUser, $apiPass, 'getSubAccounts');
+    if ($list === null) err('VoIP.ms API unreachable — check the server\'s outbound internet access', 502);
+    $listStatus = $list['status'] ?? 'no_response';
+    // "no_subaccount(s)" just means none exist yet — anything else non-success is a real error
+    if ($listStatus !== 'success' && strpos($listStatus, 'no_subaccount') !== 0) {
+        err('VoIP.ms error: ' . $listStatus . voipms_error_hint($listStatus), 502);
     }
+    $sipUsername = $listStatus === 'success' ? $findSub($list) : null;
 
     if ($sipUsername !== null) {
         // Already exists — reuse it, keep the stored password
         $sipPass = null; // don't overwrite
     } else {
         // Create the sub-account on VoIP.ms
-        $createUrl = 'https://voip.ms/api/v1/rest.php?' . http_build_query([
-            'api_username'     => $apiUser,
-            'api_password'     => $apiPass,
-            'method'           => 'createSubAccount',
-            'username'         => $subname,
-            'password'         => $sipPass,
-            'protocol'         => 1,   // SIP
-            'auth_type'        => 1,   // Password auth
-            'device_callerid'  => '',
-            'lock_international' => 0,
+        $result = voipms_call($apiUser, $apiPass, 'createSubAccount', [
+            'username'            => $subname,
+            'password'            => $sipPass,
+            'protocol'            => 1,     // SIP
+            'auth_type'           => 1,     // Password auth
+            'device_type'         => 2,     // IP PBX / softphone (required by VoIP.ms)
+            'description'         => 'Oasis Orchard user',
+            'lock_international'  => 0,
             'international_route' => 0,
-            'music_on_hold'    => 'default',
-            'allowed_codecs'   => 'ulaw;g729;gsm',
-            'dtmf_mode'        => 'rfc2833',
-            'nat'              => 'yes',
+            'music_on_hold'       => 'default',
+            'allowed_codecs'      => 'ulaw;g729;gsm',
+            'dtmf_mode'           => 'rfc2833',
+            'nat'                 => 'yes',
         ]);
-        $result = json_decode(@file_get_contents($createUrl, false, $ctx), true);
         if (!$result || ($result['status'] ?? '') !== 'success') {
-            err('VoIP.ms sub-account creation failed: ' . ($result['status'] ?? 'unknown'), 502);
+            $status = $result['status'] ?? 'no_response';
+            err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status), 502);
         }
         // VoIP.ms returns the full account name ("<mainaccount>_<subname>")
         $sipUsername = $result['account'] ?? null;
         if (!$sipUsername) {
             // Fallback: look it up so we never store a guessed username
-            $list = json_decode(@file_get_contents($listUrl, false, $ctx), true);
-            foreach (($list['accounts'] ?? []) as $a) {
-                $acct = $a['account'] ?? '';
-                if ($acct !== '' && substr($acct, -strlen('_' . $subname)) === '_' . $subname) {
-                    $sipUsername = $acct;
-                    break;
-                }
-            }
+            $sipUsername = $findSub(voipms_call($apiUser, $apiPass, 'getSubAccounts') ?? []);
         }
         if (!$sipUsername) err('VoIP.ms sub-account created but could not resolve SIP username', 502);
     }

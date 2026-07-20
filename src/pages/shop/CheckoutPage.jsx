@@ -37,6 +37,7 @@ export default function CheckoutPage() {
 
   // ── Payment config + state ────────────────────────────────────
   const [payConfig,      setPayConfig]      = useState(null);
+  const [configState,    setConfigState]    = useState('loading'); // 'loading' | 'error' | 'ready'
   const [paymentMethod,  setPaymentMethod]  = useState('stripe');
   const [clientSecret,   setClientSecret]   = useState(null);
   const [intentId,       setIntentId]       = useState(null);
@@ -52,15 +53,22 @@ export default function CheckoutPage() {
     return null;
   }, [payConfig?.stripe_enabled, payConfig?.stripe_publishable_key]);
 
-  // ── Fetch payment config on mount ─────────────────────────────
-  useEffect(() => {
-    paymentsApi.config().then(({ data }) => {
-      if (data) {
-        setPayConfig(data);
-        setPaymentMethod(data.stripe_enabled ? 'stripe' : null);
-      }
-    });
+  // ── Fetch payment config (with one automatic retry for flaky mobile networks) ─
+  const loadPayConfig = useCallback(async (attempt = 0) => {
+    setConfigState('loading');
+    try {
+      const { data, error } = await paymentsApi.config();
+      if (error || !data) throw new Error(error?.message || 'No config');
+      setPayConfig(data);
+      setPaymentMethod(data.stripe_enabled ? 'stripe' : null);
+      setConfigState('ready');
+    } catch {
+      if (attempt < 1) return loadPayConfig(attempt + 1);
+      setConfigState('error');
+    }
   }, []);
+
+  useEffect(() => { loadPayConfig(); }, [loadPayConfig]);
 
   // ── Create Stripe PaymentIntent when stripe selected ──────────
   // Requires a signed-in user — the guard below shows a login prompt otherwise.
@@ -130,7 +138,7 @@ export default function CheckoutPage() {
     },
   }), [clientSecret]);
 
-  const showPlaceOrderBtn = paymentMethod === 'stripe' && isAuthenticated;
+  const showPlaceOrderBtn = paymentMethod === 'stripe' && isAuthenticated && configState === 'ready';
 
   // ── Render ────────────────────────────────────────────────────
   const paymentPanel = (
@@ -180,7 +188,26 @@ export default function CheckoutPage() {
                 Payment Method
               </h2>
 
-              {!authLoading && !isAuthenticated ? (
+              {configState === 'loading' ? (
+                <div className="flex items-center gap-3 py-6 text-gray-400 text-sm">
+                  <div className="w-5 h-5 border-2 border-[#1bb0ce] border-t-transparent rounded-full animate-spin" />
+                  Loading payment options…
+                </div>
+              ) : configState === 'error' ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                  <p className="text-sm font-semibold text-amber-800 mb-1">Couldn't load payment options</p>
+                  <p className="text-sm text-amber-700 mb-4">
+                    Please check your connection and try again.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => loadPayConfig()}
+                    className="inline-flex items-center gap-2 bg-[#1bb0ce] hover:bg-[#159bb8] text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : !authLoading && !isAuthenticated ? (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
                   <p className="text-sm font-semibold text-[#0a1628] mb-1">Sign in to complete your order</p>
                   <p className="text-sm text-gray-600 mb-4">
