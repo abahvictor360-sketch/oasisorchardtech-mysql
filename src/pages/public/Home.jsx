@@ -245,24 +245,26 @@ function ProductsSection() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {products.slice(0, 4).map(product => (
-            <Card key={product.id} hover className="overflow-hidden group border-[--mist]">
-              <div className="h-48 flex items-center justify-center group-hover:bg-gray-100 transition-colors" style={{ background: 'var(--mist)' }}>
-                {product.image
-                  ? <img src={product.image} alt={product.name} className="h-full w-full object-contain p-4" onError={e => { e.target.style.display='none'; }} />
-                  : <Phone size={64} className="text-gray-400" />}
-              </div>
-              <div className="p-5">
-                <h3 className="font-semibold text-[#0a1628] text-base mb-1">{product.name}</h3>
-                <div className="flex items-center gap-2 mb-3">
-                  <Stars rating={Math.round(product.rating)} />
-                  <span className="text-gray-400 text-xs">({product.reviews})</span>
+            <Link key={product.id} to={`/shop/${product.id}`} aria-label={`View ${product.name}`}>
+              <Card hover className="overflow-hidden group border-[--mist] h-full">
+                <div className="h-48 flex items-center justify-center group-hover:bg-gray-100 transition-colors" style={{ background: 'var(--mist)' }}>
+                  {product.image
+                    ? <img src={product.image} alt={product.name} className="h-full w-full object-contain p-4" onError={e => { e.target.style.display='none'; }} />
+                    : <Phone size={64} className="text-gray-400" />}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono-num text-xl font-bold text-[#1bb0ce]">${product.price.toFixed(2)}</span>
-                  {product.onSale && <span className="font-mono-num text-xs line-through text-gray-400">${product.originalPrice.toFixed(2)}</span>}
+                <div className="p-5">
+                  <h3 className="font-semibold text-[#0a1628] text-base mb-1">{product.name}</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Stars rating={Math.round(product.rating)} />
+                    <span className="text-gray-400 text-xs">({product.reviews})</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono-num text-xl font-bold text-[#1bb0ce]">${product.price.toFixed(2)}</span>
+                    {product.onSale && <span className="font-mono-num text-xs line-through text-gray-400">${product.originalPrice.toFixed(2)}</span>}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           ))}
         </div>
 
