@@ -6,6 +6,9 @@
 # Private server config — NEVER commit (contains DB password)
 oasis-config.php
 
+# One-time scripts — never deploy these
+api/reset-admin.php
+
 # Logs
 logs
 *.log
@@ -18,6 +21,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+deploy
 *.local
 
 # Editor directories and files

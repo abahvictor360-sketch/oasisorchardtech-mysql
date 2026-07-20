@@ -97,10 +97,9 @@ const STATUS_BADGE = {
   failed:    { variant: 'danger',  label: 'Failed'    },
 };
 
-// ── Save setting (provider_config → page_content via contentApi) ─
+// ── Save setting (stored in voip_settings — same table the dashboard reads) ─
 async function saveSetting(key, value) {
-  const { content: contentApi } = await import('../../lib/api');
-  const { error } = await contentApi.save(`voip_setting_${key}`, value);
+  const { error } = await voipApi.saveSettings({ [key]: value });
   if (error) throw new Error(error.message);
 }
 
@@ -145,12 +144,13 @@ function ProviderSetup() {
       await saveSetting('voip_enabled',    { value: config.enabled });
       // Save VoIP.ms credentials to voip_settings (secure, server-side only)
       if (config.provider === 'voipms') {
-        await voipApi.saveSettings({
+        const { error } = await voipApi.saveSettings({
           voipms_api_user: vmsConfig.api_user,
           voipms_api_pass: vmsConfig.api_pass,
           voipms_server:   vmsConfig.server,
           voipms_did:      vmsConfig.did,
         });
+        if (error) throw new Error(error.message);
       }
       addToast('Phone call settings saved!', 'success');
       setDirty(false);
@@ -757,7 +757,8 @@ function SubAccountsManager() {
   const handleProvision = async (userId) => {
     setProvisioning(p => ({ ...p, [userId]: true }));
     try {
-      await voipApi.provision(userId);
+      const { error } = await voipApi.provision(userId);
+      if (error) throw new Error(error.message);
       addToast('Sub-account provisioned on VoIP.ms!', 'success');
       load();
     } catch (e) {

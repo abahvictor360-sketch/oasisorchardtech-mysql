@@ -2,12 +2,25 @@ export const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
+// Safari can't parse MySQL-style 'YYYY-MM-DD HH:MM:SS' strings — convert to ISO first
+export const parseDate = (value) => {
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' && value.includes(' ') && !value.includes('T')) {
+    return new Date(value.replace(' ', 'T'));
+  }
+  return new Date(value);
+};
+
 export const formatDate = (dateStr) => {
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const d = parseDate(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 export const formatDateTime = (dateStr) => {
-  return new Date(dateStr).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const d = parseDate(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
 export const generateOrderId = () => {

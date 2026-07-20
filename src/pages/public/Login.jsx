@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Phone, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
@@ -8,6 +8,7 @@ import Card from '../../components/ui/Card';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, loading } = useAuth();
   const toast = useToast();
 
@@ -25,7 +26,11 @@ export default function Login() {
       const user = await login(email, password);
       const name = user?.name || user?.email || 'there';
       toast?.success?.(`Welcome back, ${name}!`);
-      if (user?.role === 'admin') {
+      // Only follow same-site redirect paths (e.g. /checkout)
+      const redirect = searchParams.get('redirect');
+      if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+        navigate(redirect);
+      } else if (user?.role === 'admin') {
         navigate('/admin');
       } else {
         navigate('/dashboard');

@@ -57,7 +57,7 @@ export const DEFAULT_FOOTER = {
     address: '61 Rue Bastarache\nDieppe NB E1A 6Y6, Canada',
   },
   copyright: 'Oasis Orchard Technologies. All rights reserved.',
-  payments: ['Visa', 'MC', 'Amex', 'PayPal'],
+  payments: ['Visa', 'MC', 'Amex', 'Stripe'],
 };
 
 // ── Context ───────────────────────────────────────────────────

@@ -75,8 +75,8 @@ export default function Terms() {
 
             <Section number={4} title="Payments">
               <p>
-                Payments are processed securely through third-party payment providers (Stripe and
-                PayPal). We do not store your full card details on our servers. By submitting a
+                Payments are processed securely through our third-party payment provider (Stripe).
+                We do not store your full card details on our servers. By submitting a
                 payment, you confirm that you are authorized to use the payment method provided.
               </p>
             </Section>

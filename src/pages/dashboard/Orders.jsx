@@ -10,13 +10,15 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 
-const STATUS_TABS = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered'];
+const STATUS_TABS = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refunded'];
 
 const statusVariant = {
   pending: 'warning',
   processing: 'info',
   shipped: 'info',
   delivered: 'success',
+  cancelled: 'danger',
+  refunded: 'default',
 };
 
 export default function Orders() {

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/mailer.php';
 
 // ── Helpers ───────────────────────────────────────────────────
 function send($data, $status = 200) {
@@ -127,13 +128,36 @@ function send_email_notification($pdo, $order, $items) {
     if (!$to) return;
     $subject = '🛒 New Order #' . $order['id'] . ' — $' . number_format((float)$order['total'],2) . ' CAD';
     $html    = build_order_email($order, $items);
-    $headers = implode("\r\n", [
-        'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=UTF-8',
-        'From: Oasis Orchard <noreply@oasisorchard.com>',
-        'X-Mailer: PHP/' . PHP_VERSION,
+    sendMail($to, 'Admin', $subject, $html);
+}
+
+function send_customer_order_email(array $order, array $items): void {
+    $customerEmail = $order['shipping_email'] ?? '';
+    $customerName  = $order['shipping_name']  ?? 'Customer';
+    if (!$customerEmail) return;
+
+    $itemsHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;">'
+        . '<tr style="background:#0a1628;"><th style="padding:10px 12px;text-align:left;color:#b3e8f5;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Item</th>'
+        . '<th style="padding:10px 12px;text-align:center;color:#b3e8f5;font-size:11px;text-transform:uppercase;">Qty</th>'
+        . '<th style="padding:10px 12px;text-align:right;color:#b3e8f5;font-size:11px;text-transform:uppercase;">Total</th></tr>';
+    foreach ($items as $it) {
+        $itemsHtml .= '<tr><td style="padding:10px 12px;border-bottom:1px solid #eee;color:#0a1628;">' . htmlspecialchars($it['product_name'])
+            . '</td><td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center;color:#555;">' . (int)$it['quantity']
+            . '</td><td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;color:#0a1628;">$' . number_format((float)$it['total_price'], 2) . '</td></tr>';
+    }
+    $itemsHtml .= '</table>';
+
+    $addr = trim(($order['shipping_street'] ?? '') . ', ' . ($order['shipping_city'] ?? '') . ', ' . ($order['shipping_state'] ?? ''), ', ');
+    $sent = send_templated_mail('order_confirmation', $customerEmail, $customerName, [
+        'shipping_name'    => $customerName,
+        'order_id'         => $order['id'],
+        'order_date'       => date('F j, Y'),
+        'total'            => number_format((float)$order['total'], 2),
+        'payment_method'   => ucfirst($order['payment_method'] ?? 'N/A'),
+        'shipping_address' => $addr,
+        'items_html'       => $itemsHtml,
     ]);
-    @mail($to, $subject, $html, $headers);
+    if (!$sent) sendMail($customerEmail, $customerName, 'Order Confirmed — #' . $order['id'], orderConfirmationHtml($order, $items));
 }
 
 function build_whatsapp_message($order, $items) {
@@ -197,6 +221,164 @@ function send_whatsapp_notification($pdo, $order, $items) {
     }
 }
 
+// ── Email triggers ────────────────────────────────────────────────
+
+function trigger_welcome_email(string $email, string $name): void {
+    try {
+        $site = defined('SITE_URL') ? SITE_URL : '';
+        $sent = send_templated_mail('welcome', $email, $name ?: 'User', [
+            'name'          => $name ?: 'there',
+            'dashboard_url' => $site . '/dashboard',
+        ]);
+        if (!$sent) sendMail($email, $name ?: 'User', 'Welcome to Oasis Orchard Technologies', welcomeEmailHtml($name));
+    } catch (Throwable $e) { error_log('[Email] welcome: ' . $e->getMessage()); }
+}
+
+function trigger_new_user_admin(string $email, string $name, string $plan): void {
+    try {
+        $site = defined('SITE_URL') ? SITE_URL : '';
+        $sent = admin_templated_mail('new_user_admin', [
+            'name'      => $name ?: 'N/A',
+            'email'     => $email,
+            'plan'      => ucfirst($plan ?: 'basic'),
+            'date'      => date('F j, Y \a\t g:i A T'),
+            'admin_url' => $site . '/admin/users',
+        ]);
+        if (!$sent) notify_admin('New User Registered — ' . ($name ?: $email), newUserAdminHtml($name, $email, $plan));
+    } catch (Throwable $e) { error_log('[Email] new_user_admin: ' . $e->getMessage()); }
+}
+
+function trigger_order_status_email($pdo, string $orderId, string $newStatus): void {
+    try {
+        $s = $pdo->prepare('SELECT * FROM orders WHERE id=?');
+        $s->execute([$orderId]);
+        $order = $s->fetch();
+        if (!$order || empty($order['shipping_email'])) return;
+        $statusInfo = [
+            'processing' => ['label'=>'Processing','color'=>'#ca8a04','bg'=>'#fefce8','border'=>'#fde68a','msg'=>'Your order is being processed and will be shipped soon.'],
+            'shipped'    => ['label'=>'Shipped',   'color'=>'#2563eb','bg'=>'#eff6ff','border'=>'#bfdbfe','msg'=>'Your order is on its way!'],
+            'delivered'  => ['label'=>'Delivered', 'color'=>'#16a34a','bg'=>'#f0fdf4','border'=>'#bbf7d0','msg'=>'Your order has been delivered. We hope you love it!'],
+            'cancelled'  => ['label'=>'Cancelled', 'color'=>'#dc2626','bg'=>'#fef2f2','border'=>'#fecaca','msg'=>'Your order has been cancelled. Contact us if you have questions.'],
+            'refunded'   => ['label'=>'Refunded',  'color'=>'#7c3aed','bg'=>'#f5f3ff','border'=>'#ddd6fe','msg'=>'Your payment has been refunded. It may take 5-10 business days to appear on your statement.'],
+        ];
+        $info = $statusInfo[$newStatus] ?? ['label'=>ucfirst($newStatus),'color'=>'#555','bg'=>'#f8fafc','border'=>'#e8ecf0','msg'=>'Your order status has been updated.'];
+        $sent = send_templated_mail('order_status_update', $order['shipping_email'], $order['shipping_name'], [
+            'shipping_name'  => $order['shipping_name'],
+            'order_id'       => $orderId,
+            'order_date'     => date('F j, Y'),
+            'status_label'   => $info['label'],
+            'total'          => number_format((float)$order['total'], 2),
+            'status_message' => $info['msg'],
+            'status_color'   => $info['color'],
+            'status_bg'      => $info['bg'],
+            'status_border'  => $info['border'],
+        ]);
+        if (!$sent) sendMail($order['shipping_email'], $order['shipping_name'],
+            'Order #' . $orderId . ' — ' . ucfirst($newStatus), orderStatusEmailHtml($order, $newStatus));
+    } catch (Throwable $e) { error_log('[Email] order_status: ' . $e->getMessage()); }
+}
+
+function trigger_order_confirmation($pdo, string $orderId): void {
+    try {
+        $s = $pdo->prepare('SELECT * FROM orders WHERE id=?');
+        $s->execute([$orderId]);
+        $order = $s->fetch();
+        if (!$order || empty($order['shipping_email'])) return;
+
+        $si = $pdo->prepare('SELECT * FROM order_items WHERE order_id=?');
+        $si->execute([$orderId]);
+        $items = $si->fetchAll();
+
+        $rows = '';
+        foreach ($items as $it) {
+            $pn  = htmlspecialchars($it['product_name']);
+            $qty = (int)$it['quantity'];
+            $tp  = number_format((float)$it['total_price'], 2);
+            $rows .= "<tr><td style='padding:9px 14px;color:#0a1628;font-size:13px;border-bottom:1px solid #f1f5f9;'>$pn</td>"
+                   . "<td style='padding:9px 14px;color:#888;font-size:13px;border-bottom:1px solid #f1f5f9;text-align:center;'>&times;$qty</td>"
+                   . "<td style='padding:9px 14px;color:#0a1628;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;text-align:right;'>\$$tp</td></tr>";
+        }
+        $itemsHtml = "<table width='100%' cellpadding='0' cellspacing='0' style='border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:16px;'>"
+                   . "<tr style='background:#f8fafc;'><th style='text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.5px;'>Item</th>"
+                   . "<th style='padding:10px 14px;font-size:11px;text-transform:uppercase;color:#888;'>Qty</th>"
+                   . "<th style='text-align:right;padding:10px 14px;font-size:11px;text-transform:uppercase;color:#888;'>Total</th></tr>$rows</table>";
+
+        $address = implode(', ', array_filter([
+            $order['shipping_street'] ?? '',
+            $order['shipping_city'] ?? '',
+            trim(($order['shipping_state'] ?? '') . ' ' . ($order['shipping_zip'] ?? '')),
+            $order['shipping_country'] ?? '',
+        ]));
+
+        $sent = send_templated_mail('order_confirmation', $order['shipping_email'], $order['shipping_name'], [
+            'shipping_name'    => $order['shipping_name'],
+            'order_id'         => $orderId,
+            'order_date'       => date('F j, Y'),
+            'total'            => number_format((float)$order['total'], 2),
+            'payment_method'   => ucfirst($order['payment_method'] ?? 'card'),
+            'shipping_address' => htmlspecialchars($address),
+            'items_html'       => $itemsHtml,
+        ]);
+        if (!$sent) {
+            $name = htmlspecialchars($order['shipping_name']);
+            sendMail($order['shipping_email'], $order['shipping_name'], 'Order Confirmed — #' . $orderId,
+                emailWrap('Order Confirmed', "
+                <h2 style='margin:0 0 8px;color:#0a1628;font-size:20px;'>Order Confirmed &#10003;</h2>
+                <p style='color:#555;font-size:15px;margin:0 0 20px;'>Hi $name, thank you for your order! Order #$orderId has been received and paid.</p>
+                $itemsHtml
+                <p style='color:#0a1628;font-size:16px;font-weight:700;'>Total: \$" . number_format((float)$order['total'], 2) . " CAD</p>
+                <p style='color:#888;font-size:13px;'>Shipping to: " . htmlspecialchars($address) . "</p>",
+                "Order #$orderId confirmed"));
+        }
+    } catch (Throwable $e) { error_log('[Email] order_confirmation: ' . $e->getMessage()); }
+}
+
+function trigger_voip_provisioned($pdo, string $userId, string $sipUsername, string $sipServer): void {
+    try {
+        $s = $pdo->prepare('SELECT u.email, p.name FROM users u LEFT JOIN profiles p ON p.id=u.id WHERE u.id=?');
+        $s->execute([$userId]);
+        $row = $s->fetch();
+        if (!$row || empty($row['email'])) return;
+        $site = defined('SITE_URL') ? SITE_URL : '';
+        $name = $row['name'] ?: 'User';
+        $sent = send_templated_mail('voip_provisioned', $row['email'], $name, [
+            'name'         => $name,
+            'sip_username' => $sipUsername,
+            'sip_server'   => $sipServer,
+            'voip_url'     => $site . '/dashboard/voip',
+        ]);
+        if (!$sent) sendMail($row['email'], $name, 'Your VoIP Account is Ready', voipProvisionedHtml($name, $sipUsername, $sipServer));
+    } catch (Throwable $e) { error_log('[Email] voip_provisioned: ' . $e->getMessage()); }
+}
+
+function trigger_support_msg_admin(string $userName, string $userEmail, string $subject, string $message): void {
+    try {
+        $site = defined('SITE_URL') ? SITE_URL : '';
+        $sent = admin_templated_mail('support_new_admin', [
+            'user_name'    => $userName ?: 'User',
+            'user_email'   => $userEmail,
+            'subject'      => $subject,
+            'message_html' => nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8')),
+            'date'         => date('F j, Y \a\t g:i A'),
+            'admin_url'    => $site . '/admin/support',
+        ]);
+        if (!$sent) notify_admin('Support: ' . $subject, newSupportMsgAdminHtml($userName, $userEmail, $subject, $message));
+    } catch (Throwable $e) { error_log('[Email] support_admin: ' . $e->getMessage()); }
+}
+
+function trigger_support_reply_user(string $email, string $name, string $subject, string $adminMessage): void {
+    try {
+        $site = defined('SITE_URL') ? SITE_URL : '';
+        $sent = send_templated_mail('support_reply', $email, $name ?: 'User', [
+            'name'                => $name ?: 'User',
+            'subject'             => $subject,
+            'admin_message_html'  => nl2br(htmlspecialchars($adminMessage, ENT_QUOTES, 'UTF-8')),
+            'dashboard_url'       => $site . '/dashboard/support',
+        ]);
+        if (!$sent) sendMail($email, $name ?: 'User', 'We replied to your support request', supportReplyUserHtml($name, $subject, $adminMessage));
+    } catch (Throwable $e) { error_log('[Email] support_reply: ' . $e->getMessage()); }
+}
+
 function notify_admin_new_order($pdo, $orderId) {
     try {
         $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
@@ -207,6 +389,7 @@ function notify_admin_new_order($pdo, $orderId) {
         $s2->execute([$orderId]);
         $items = $s2->fetchAll();
         send_email_notification($pdo, $order, $items);
+        send_customer_order_email($order, $items);
         send_whatsapp_notification($pdo, $order, $items);
     } catch (Exception $e) { /* silent — never break the order flow */ }
 }
@@ -243,47 +426,38 @@ function stripe_curl($pdo, $endpoint, $data = [], $httpMethod = 'POST') {
             'error' => ($decoded['error']['message'] ?? null)];
 }
 
-function paypal_base($mode) {
-    return $mode === 'live'
-        ? 'https://api-m.paypal.com'
-        : 'https://api-m.sandbox.paypal.com';
-}
-
-function paypal_token($client_id, $secret, $mode) {
-    $ch = curl_init(paypal_base($mode) . '/v1/oauth2/token');
+// ── VoIP.ms REST call via cURL (allow_url_fopen is often disabled on shared hosts) ─
+function voipms_call($apiUser, $apiPass, $method, array $params = []) {
+    $url = 'https://voip.ms/api/v1/rest.php?' . http_build_query(array_merge($params, [
+        'api_username' => $apiUser,
+        'api_password' => $apiPass,
+        'method'       => $method,
+    ]));
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => 'grant_type=client_credentials',
-        CURLOPT_USERPWD        => $client_id . ':' . $secret,
-        CURLOPT_HTTPHEADER     => [
-            'Accept: application/json',
-            'Content-Type: application/x-www-form-urlencoded',
-        ],
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_SSL_VERIFYPEER => true,
     ]);
-    $res = json_decode(curl_exec($ch), true);
+    $raw = curl_exec($ch);
     curl_close($ch);
-    return $res['access_token'] ?? null;
+    if ($raw === false) return null;
+    return json_decode($raw, true);
 }
 
-function paypal_curl($token, $endpoint, $data, $mode, $httpMethod = 'POST') {
-    $ch = curl_init(paypal_base($mode) . $endpoint);
-    $opts = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CUSTOMREQUEST  => $httpMethod,
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: Bearer ' . $token,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ],
-    ];
-    if ($httpMethod !== 'GET' && !empty($data))
-        $opts[CURLOPT_POSTFIELDS] = json_encode($data);
-    curl_setopt_array($ch, $opts);
-    $res  = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    return ['data' => json_decode($res, true), 'status' => $code];
+// Map common VoIP.ms error statuses to an actionable hint for the admin
+function voipms_error_hint($status) {
+    switch ($status) {
+        case 'ip_not_enabled':
+            return ' — your server IP is not whitelisted. Log in to voip.ms → Main Menu → API → add this server\'s IP to "Allowed IPs".';
+        case 'invalid_credentials':
+        case 'missing_credentials':
+            return ' — check the API username/password saved in Admin → VoIP → Provider Setup (the API password is NOT your voip.ms login password).';
+        case 'api_not_enabled':
+            return ' — enable the API at voip.ms → Main Menu → API.';
+        default:
+            return '';
+    }
 }
 
 function make_order_id() {
@@ -385,12 +559,23 @@ case 'auth':
         $ck = $pdo->prepare('SELECT id FROM users WHERE email = ?');
         $ck->execute([$email]);
         if ($ck->fetch()) err('Email already registered', 409);
-        $id   = bin2hex(random_bytes(18));
-        $hash = password_hash($pass, PASSWORD_BCRYPT);
-        $pdo->prepare('INSERT INTO users (id,email,password_hash,role) VALUES (?,?,?,?)')->execute([$id,$email,$hash,'user']);
+        $id      = bin2hex(random_bytes(18));
+        $hash    = password_hash($pass, PASSWORD_BCRYPT);
+        $vTok    = bin2hex(random_bytes(32));
+        $pdo->prepare('INSERT INTO users (id,email,password_hash,role,email_verify_token) VALUES (?,?,?,?,?)')->execute([$id,$email,$hash,'user',$vTok]);
+        $uname = $meta['name'] ?? '';
         $pdo->prepare('INSERT INTO profiles (id,email,name,phone,plan,role) VALUES (?,?,?,?,?,?)')->execute([
-            $id,$email,$meta['name']??'',$meta['phone']??'',$meta['plan']??'basic','user',
+            $id,$email,$uname,$meta['phone']??'',$meta['plan']??'basic','user',
         ]);
+        $verifyUrl = SITE_URL . '/verify-email?token=' . $vTok;
+        $uplan = $meta['plan'] ?? 'basic';
+        // Non-blocking emails — never abort signup on failure
+        trigger_welcome_email($email, $uname);
+        trigger_new_user_admin($email, $uname, $uplan);
+        try {
+            sendMail($email, $uname ?: 'User', 'Verify Your Email — Oasis Orchard Technologies',
+                     emailVerificationHtml($uname ?: 'User', $verifyUrl));
+        } catch (Throwable $e) { error_log('[Signup] Verification email failed: ' . $e->getMessage()); }
         send(['user' => ['id'=>$id,'email'=>$email,'role'=>'user']], 201);
         break;
 
@@ -418,6 +603,73 @@ case 'auth':
         $t = token();
         $pdo->prepare('DELETE FROM sessions WHERE user_id=? AND token<>?')->execute([$u['id'], $t]);
         send(['changed' => true]);
+        break;
+
+    case 'send-verification':
+        // Resend / send email verification link to logged-in user
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $u = authUser($pdo);
+        $tok = bin2hex(random_bytes(32));
+        $pdo->prepare('UPDATE users SET email_verify_token=? WHERE id=?')->execute([$tok, $u['id']]);
+        $url = SITE_URL . '/verify-email?token=' . $tok;
+        $p2  = $pdo->prepare('SELECT name FROM profiles WHERE id=?');
+        $p2->execute([$u['id']]);
+        $uname = $p2->fetch()['name'] ?? 'User';
+        $sent = sendMail($u['email'], $uname, 'Verify Your Email — Oasis Orchard Technologies', emailVerificationHtml($uname, $url));
+        send(['sent' => $sent]);
+        break;
+
+    case 'verify-email':
+        // GET /api/auth/verify-email?token=xxx
+        if ($method !== 'GET') err('Method not allowed', 405);
+        $tok = $_GET['token'] ?? '';
+        if (!$tok) err('Token required');
+        $s = $pdo->prepare('SELECT id FROM users WHERE email_verify_token=?');
+        $s->execute([$tok]);
+        $row = $s->fetch();
+        if (!$row) err('Invalid or expired token', 404);
+        $pdo->prepare('UPDATE users SET email_verified=1, email_verify_token=NULL WHERE id=?')->execute([$row['id']]);
+        send(['verified' => true]);
+        break;
+
+    case 'forgot-password':
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $b     = body();
+        $email = trim($b['email'] ?? '');
+        if (!$email) err('Email required');
+        // Always return success to avoid user enumeration
+        $s = $pdo->prepare('SELECT u.id, p.name FROM users u LEFT JOIN profiles p ON p.id=u.id WHERE u.email=?');
+        $s->execute([$email]);
+        $row = $s->fetch();
+        if ($row) {
+            $tok     = bin2hex(random_bytes(32));
+            $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+            $pdo->prepare('UPDATE users SET reset_token=?, reset_token_expires=? WHERE id=?')
+                ->execute([$tok, $expires, $row['id']]);
+            $url = SITE_URL . '/reset-password?token=' . $tok;
+            sendMail($email, $row['name'] ?? 'User', 'Reset Your Password — Oasis Orchard Technologies',
+                     passwordResetHtml($row['name'] ?? 'User', $url));
+        }
+        send(['message' => 'If that email exists, a reset link has been sent.']);
+        break;
+
+    case 'reset-password':
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $b    = body();
+        $tok  = $b['token']    ?? '';
+        $pass = $b['password'] ?? '';
+        if (!$tok || !$pass) err('Token and password required');
+        if (strlen($pass) < 6) err('Password must be at least 6 characters');
+        $s = $pdo->prepare('SELECT id FROM users WHERE reset_token=? AND reset_token_expires > NOW()');
+        $s->execute([$tok]);
+        $row = $s->fetch();
+        if (!$row) err('Invalid or expired reset link', 400);
+        $hash = password_hash($pass, PASSWORD_BCRYPT);
+        $pdo->prepare('UPDATE users SET password_hash=?, reset_token=NULL, reset_token_expires=NULL WHERE id=?')
+            ->execute([$hash, $row['id']]);
+        // Revoke all sessions so attacker sessions are terminated
+        $pdo->prepare('DELETE FROM sessions WHERE user_id=?')->execute([$row['id']]);
+        send(['reset' => true]);
         break;
 
     case 'me':
@@ -637,6 +889,8 @@ case 'users':
 
 // ═══ WALLET ══════════════════════════════════════════════════════
 case 'wallet':
+
+    // POST /wallet/credit — admin credits a user
     if ($r1 === 'credit') {
         authUser($pdo, true);
         $b   = body();
@@ -651,8 +905,70 @@ case 'wallet':
         $newBal = (float)$p['wallet_balance'] + $amt;
         $pdo->prepare('UPDATE profiles SET wallet_balance=? WHERE id=?')->execute([$newBal,$uid]);
         $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')->execute([$uid,$note,$amt,'credit',$newBal]);
-        send(['new_balance'=>$newBal]);
-    } else {
+        send(['new_balance'=>$newBal, 'transaction' => ['description'=>$note,'amount'=>$amt,'type'=>'credit','balance_after'=>$newBal,'created_at'=>date('c')]]);
+    }
+
+    // POST /wallet/topup/stripe — create a Stripe PaymentIntent for wallet top-up
+    elseif ($r1 === 'topup' && $r2 === 'stripe') {
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $u   = authUser($pdo);
+        $b   = body();
+        $cfg = pay_settings($pdo);
+        if (($cfg['stripe_enabled'] ?? 'false') !== 'true') err('Stripe is not enabled', 400);
+        $amount = (int)(round((float)($b['amount'] ?? 0), 2) * 100); // cents
+        if ($amount < 100) err('Minimum top-up is $1.00');
+        $currency = strtolower($cfg['currency'] ?? 'cad');
+        $res = stripe_curl($pdo, 'payment_intents', [
+            'amount'                             => $amount,
+            'currency'                           => $currency,
+            'payment_method_types[0]'            => 'card',
+            'metadata[user_id]'                  => $u['id'],
+            'metadata[purpose]'                  => 'wallet_topup',
+        ]);
+        if ($res['error']) err('Stripe error: ' . $res['error'], 502);
+        send([
+            'clientSecret' => $res['data']['client_secret'],
+            'intentId'     => $res['data']['id'],
+        ]);
+    }
+
+    // POST /wallet/topup/confirm — verify Stripe payment and credit wallet
+    elseif ($r1 === 'topup' && $r2 === 'confirm') {
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $u          = authUser($pdo);
+        $b          = body();
+        $intentId   = trim($b['intent_id'] ?? '');
+        if (!$intentId) err('intent_id required');
+
+        // Retrieve PaymentIntent from Stripe to verify
+        $res = stripe_curl($pdo, 'payment_intents/' . $intentId, [], 'GET');
+        if ($res['error'] || ($res['status'] ?? 0) !== 200) err('Could not verify payment', 502);
+        $pi = $res['data'];
+
+        if (($pi['status'] ?? '') !== 'succeeded') err('Payment not completed');
+        if (($pi['metadata']['purpose'] ?? '') !== 'wallet_topup') err('Invalid payment purpose');
+        if (($pi['metadata']['user_id'] ?? '') !== $u['id']) err('Payment user mismatch', 403);
+
+        // Idempotency: check if already credited
+        $chk = $pdo->prepare("SELECT id FROM wallet_transactions WHERE description LIKE ?");
+        $chk->execute(['%' . $intentId . '%']);
+        if ($chk->fetch()) err('This payment has already been applied', 409);
+
+        $amountDollars = $pi['amount'] / 100;
+        $s = $pdo->prepare('SELECT wallet_balance FROM profiles WHERE id=?');
+        $s->execute([$u['id']]);
+        $profile = $s->fetch();
+        if (!$profile) err('User not found', 404);
+        $newBal = (float)$profile['wallet_balance'] + $amountDollars;
+        $note   = 'Wallet top-up via card (Stripe: ' . $intentId . ')';
+        $pdo->prepare('UPDATE profiles SET wallet_balance=? WHERE id=?')->execute([$newBal, $u['id']]);
+        $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
+            ->execute([$u['id'], $note, $amountDollars, 'credit', $newBal]);
+        send(['new_balance' => $newBal, 'amount' => $amountDollars]);
+    }
+
+    // GET /wallet/:uid — transaction history
+    else {
         $u = authUser($pdo);
         $uid = $r1 ?? $u['id'];
         if ($uid !== $u['id'] && $u['role'] !== 'admin') err('Forbidden',403);
@@ -730,6 +1046,19 @@ case 'voip':
             $rows = $pdo->query("SELECT `key`, `value` FROM voip_settings")->fetchAll();
             $map  = [];
             foreach ($rows as $r) $map[$r['key']] = json_decode($r['value'], true);
+            // Non-admins only get what the dashboard needs — never API credentials
+            if (($u['role'] ?? '') !== 'admin') {
+                $safe = [];
+                if (isset($map['provider_config']) && is_array($map['provider_config'])) {
+                    $pc = $map['provider_config'];
+                    foreach (array_keys($pc) as $k) {
+                        if (preg_match('/pass|secret|token/i', $k)) unset($pc[$k]);
+                    }
+                    $safe['provider_config'] = $pc;
+                }
+                if (isset($map['voip_enabled'])) $safe['voip_enabled'] = $map['voip_enabled'];
+                $map = $safe;
+            }
             send($map);
         } elseif ($method === 'PUT') {
             authUser($pdo, true);
@@ -755,10 +1084,11 @@ case 'payments':
         send([
             'stripe_enabled'        => ($cfg['stripe_enabled'] ?? 'false') === 'true',
             'stripe_publishable_key'=> $cfg['stripe_publishable_key'] ?? '',
-            'paypal_enabled'        => ($cfg['paypal_enabled'] ?? 'false') === 'true',
-            'paypal_client_id'      => $cfg['paypal_client_id'] ?? '',
-            'paypal_mode'           => $cfg['paypal_mode'] ?? 'sandbox',
             'currency'              => $cfg['currency'] ?? 'CAD',
+            // Cart pricing rules (admin-configurable)
+            'shipping_fee'            => isset($cfg['shipping_fee']) && $cfg['shipping_fee'] !== '' ? (float)$cfg['shipping_fee'] : 9.99,
+            'free_shipping_threshold' => isset($cfg['free_shipping_threshold']) && $cfg['free_shipping_threshold'] !== '' ? (float)$cfg['free_shipping_threshold'] : 100,
+            'tax_rate'                => isset($cfg['tax_rate']) && $cfg['tax_rate'] !== '' ? (float)$cfg['tax_rate'] : 0,
         ]);
         break;
 
@@ -772,7 +1102,7 @@ case 'payments':
             $b = body();
             $allowed = [
                 'stripe_enabled','stripe_publishable_key','stripe_secret_key','stripe_webhook_secret',
-                'paypal_enabled','paypal_client_id','paypal_client_secret','paypal_mode','currency',
+                'currency','shipping_fee','free_shipping_threshold','tax_rate',
             ];
             $stmt = $pdo->prepare("INSERT INTO payment_settings (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)");
             foreach ($allowed as $k) {
@@ -793,10 +1123,11 @@ case 'payments':
             $currency = strtolower($cfg['currency'] ?? 'cad');
             $amount   = (int)(round((float)($b['total'] ?? 0), 2) * 100); // cents
             if ($amount < 50) err('Amount too small', 400);
+            // Card only — redirect-based methods (Klarna etc.) aren't handled by this flow
             $res = stripe_curl($pdo, 'payment_intents', [
                 'amount'                     => $amount,
                 'currency'                   => $currency,
-                'automatic_payment_methods[enabled]' => 'true',
+                'payment_method_types[0]'    => 'card',
                 'metadata[user_id]'          => $u['id'],
             ]);
             if ($res['error']) err('Stripe error: ' . $res['error'], 502);
@@ -804,6 +1135,38 @@ case 'payments':
                 'clientSecret' => $res['data']['client_secret'],
                 'intentId'     => $res['data']['id'],
             ]);
+        } elseif ($r2 === 'refund') {
+            // POST /payments/stripe/refund — admin refunds a paid order in full
+            if ($method !== 'POST') err('Method not allowed', 405);
+            authUser($pdo, true);
+            $b       = body();
+            $orderId = $b['order_id'] ?? '';
+            if (!$orderId) err('order_id required', 400);
+
+            $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
+            $s->execute([$orderId]);
+            $order = $s->fetch();
+            if (!$order) err('Order not found', 404);
+            if ($order['payment_status'] !== 'paid') err('Only paid orders can be refunded', 400);
+            if (empty($order['stripe_intent_id'])) err('This order has no Stripe payment to refund', 400);
+
+            $res = stripe_curl($pdo, 'refunds', ['payment_intent' => $order['stripe_intent_id']]);
+            if (!empty($res['error']) || $res['status'] >= 400) {
+                err('Stripe refund failed: ' . ($res['error'] ?: 'HTTP ' . $res['status']), 502);
+            }
+
+            $pdo->prepare("UPDATE orders SET payment_status='refunded', status='refunded' WHERE id=?")->execute([$orderId]);
+            $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
+                ->execute([$orderId, 'stripe', $res['data']['id'] ?? '',
+                           -1 * (float)($res['data']['amount'] ?? 0) / 100,
+                           strtoupper($res['data']['currency'] ?? 'cad'), 'refunded']);
+
+            // Let the customer know
+            trigger_order_status_email($pdo, $orderId, 'refunded');
+
+            $s->execute([$orderId]);
+            send($s->fetch());
+
         } elseif ($r2 === 'webhook') {
             // Stripe webhook — verify signature then update order payment status
             $payload    = file_get_contents('php://input');
@@ -823,58 +1186,19 @@ case 'payments':
             $event = json_decode($payload, true);
             if ($event['type'] === 'payment_intent.succeeded') {
                 $pi = $event['data']['object'];
-                $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing' WHERE stripe_intent_id=?")
-                    ->execute([$pi['id']]);
-                $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) SELECT id,?,?,?,?,? FROM orders WHERE stripe_intent_id=?")
-                    ->execute(['stripe',$pi['id'],(float)$pi['amount']/100,strtoupper($pi['currency']),'succeeded',$pi['id']]);
+                $so = $pdo->prepare("SELECT id, payment_status FROM orders WHERE stripe_intent_id=?");
+                $so->execute([$pi['id']]);
+                $ord = $so->fetch();
+                // Only act once — the checkout confirm endpoint may already have handled it
+                if ($ord && $ord['payment_status'] !== 'paid') {
+                    $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing' WHERE id=?")
+                        ->execute([$ord['id']]);
+                    $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
+                        ->execute([$ord['id'],'stripe',$pi['id'],(float)$pi['amount']/100,strtoupper($pi['currency']),'succeeded']);
+                    trigger_order_confirmation($pdo, $ord['id']);
+                }
             }
             send(['received' => true]);
-        } else err('Not found', 404);
-        break;
-
-    // POST /payments/paypal/create-order
-    // POST /payments/paypal/capture
-    case 'paypal':
-        $u   = authUser($pdo);
-        $cfg = pay_settings($pdo);
-        if (($cfg['paypal_enabled'] ?? 'false') !== 'true') err('PayPal not enabled', 400);
-        $mode   = $cfg['paypal_mode'] ?? 'sandbox';
-        $tok    = paypal_token($cfg['paypal_client_id']??'', $cfg['paypal_client_secret']??'', $mode);
-        if (!$tok) err('PayPal auth failed', 502);
-        $currency = strtoupper($cfg['currency'] ?? 'CAD');
-
-        if ($r2 === 'create-order') {
-            if ($method !== 'POST') err('Method not allowed', 405);
-            $b     = body();
-            $total = number_format((float)($b['total'] ?? 0), 2, '.', '');
-            $res   = paypal_curl($tok, '/v2/checkout/orders', [
-                'intent' => 'CAPTURE',
-                'purchase_units' => [[
-                    'amount' => ['currency_code' => $currency, 'value' => $total],
-                    'description' => 'Oasis Orchard Technologies Order',
-                ]],
-            ], $mode);
-            if ($res['status'] >= 400) err('PayPal error', 502);
-            send(['paypalOrderId' => $res['data']['id']]);
-
-        } elseif ($r2 === 'capture') {
-            if ($method !== 'POST') err('Method not allowed', 405);
-            $b            = body();
-            $paypalOrderId = $b['paypalOrderId'] ?? '';
-            $dbOrderId    = $b['orderId'] ?? '';
-            if (!$paypalOrderId) err('PayPal order ID required', 400);
-            $res = paypal_curl($tok, "/v2/checkout/orders/{$paypalOrderId}/capture", [], $mode);
-            if ($res['status'] >= 400) err('PayPal capture failed', 502);
-            $capture = $res['data']['purchase_units'][0]['payments']['captures'][0] ?? [];
-            // Update order in DB
-            if ($dbOrderId) {
-                $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing', paypal_order_id=? WHERE id=?")
-                    ->execute([$paypalOrderId, $dbOrderId]);
-                $captureId = $capture['id'] ?? null;
-                $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
-                    ->execute([$dbOrderId,'paypal',$captureId,(float)($capture['amount']['value']??0),$currency,'captured']);
-            }
-            send(['status' => 'captured', 'captureId' => $capture['id'] ?? null]);
         } else err('Not found', 404);
         break;
 
@@ -909,8 +1233,8 @@ case 'orders':
 
             if ($total <= 0 || empty($items)) err('Invalid order', 400);
 
-            // Only real payment gateways are accepted (wallet/pay-later disabled)
-            if (!in_array($pm, ['stripe', 'paypal'], true)) err('Invalid payment method', 400);
+            // Stripe is the only accepted payment gateway
+            if ($pm !== 'stripe') err('Invalid payment method', 400);
 
             $pdo->prepare("INSERT INTO orders (id,user_id,payment_method,payment_status,stripe_intent_id,subtotal,total,shipping_name,shipping_email,shipping_phone,shipping_street,shipping_city,shipping_state,shipping_zip,shipping_country) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([
@@ -947,8 +1271,33 @@ case 'orders':
         } else err('Method not allowed', 405);
 
     } else {
-        // Single order: GET /orders/:id  PATCH /orders/:id
-        if ($method === 'GET') {
+        // Single order: GET /orders/:id  PATCH /orders/:id  POST /orders/:id/confirm
+        if ($r2 === 'confirm') {
+            // Called by checkout after Stripe confirms client-side. Payment status is
+            // verified server-side against Stripe — the client is never trusted.
+            if ($method !== 'POST') err('Method not allowed', 405);
+            $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
+            $s->execute([$r1]);
+            $order = $s->fetch();
+            if (!$order) err('Not found', 404);
+            if ($order['user_id'] !== $u['id'] && $u['role'] !== 'admin') err('Forbidden', 403);
+            if (empty($order['stripe_intent_id'])) err('No payment on this order', 400);
+
+            if ($order['payment_status'] !== 'paid') {
+                $res = stripe_curl($pdo, 'payment_intents/' . $order['stripe_intent_id'], [], 'GET');
+                $piStatus = $res['data']['status'] ?? '';
+                if ($piStatus !== 'succeeded') err('Payment not completed (status: ' . ($piStatus ?: 'unknown') . ')', 402);
+                $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing' WHERE id=?")->execute([$r1]);
+                $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
+                    ->execute([$r1, 'stripe', $order['stripe_intent_id'],
+                               (float)($res['data']['amount'] ?? 0) / 100,
+                               strtoupper($res['data']['currency'] ?? 'cad'), 'succeeded']);
+                trigger_order_confirmation($pdo, $r1);
+            }
+            $s->execute([$r1]);
+            send($s->fetch());
+
+        } elseif ($method === 'GET') {
             $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
             $s->execute([$r1]);
             $order = $s->fetch();
@@ -968,6 +1317,10 @@ case 'orders':
             if (!$fields) err('Nothing to update', 400);
             $vals[] = $r1;
             $pdo->prepare("UPDATE orders SET " . implode(',', $fields) . " WHERE id=?")->execute($vals);
+            // Email customer when order status changes (not payment_status)
+            if (isset($b['status'])) {
+                trigger_order_status_email($pdo, $r1, $b['status']);
+            }
             $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
             $s->execute([$r1]);
             send($s->fetch());
@@ -1026,6 +1379,58 @@ case 'notifications':
     } else err('Not found', 404);
     break;
 
+// ═══ SMTP SETTINGS ════════════════════════════════════════════════
+case 'smtp':
+    authUser($pdo, true);
+    $allowed_smtp = ['smtp_enabled','smtp_host','smtp_port','smtp_secure','smtp_user','smtp_pass','smtp_from','smtp_from_name'];
+
+    if ($r1 === 'settings') {
+        if ($method === 'GET') {
+            $rows = $pdo->query("SELECT `key`,`value` FROM smtp_settings")->fetchAll();
+            $out  = [];
+            foreach ($rows as $r) $out[$r['key']] = $r['value'];
+            // Never return the password to the client — return a mask instead
+            if (!empty($out['smtp_pass'])) $out['smtp_pass'] = '••••••••';
+            send($out);
+
+        } elseif ($method === 'PUT') {
+            $b = body();
+            foreach ($allowed_smtp as $k) {
+                if (!array_key_exists($k, $b)) continue;
+                $val = (string)$b[$k];
+                // Don't overwrite password if client sent back the mask
+                if ($k === 'smtp_pass' && $val === '••••••••') continue;
+                $pdo->prepare("INSERT INTO smtp_settings (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)")->execute([$k, $val]);
+            }
+            $rows = $pdo->query("SELECT `key`,`value` FROM smtp_settings")->fetchAll();
+            $out  = [];
+            foreach ($rows as $r) $out[$r['key']] = $r['value'];
+            if (!empty($out['smtp_pass'])) $out['smtp_pass'] = '••••••••';
+            send($out);
+
+        } else err('Method not allowed', 405);
+
+    } elseif ($r1 === 'test') {
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $b    = body();
+        $to   = trim($b['email'] ?? '');
+        if (!$to) err('Test email address required');
+        // Verify PHPMailer library exists before attempting
+        if (!file_exists(__DIR__ . '/phpmailer/PHPMailer.php')) {
+            send(['sent' => false, 'error' => 'PHPMailer library missing from server. Re-deploy the site to upload api/phpmailer/ folder.']);
+        }
+        $html = emailWrap('SMTP Test', "
+          <h2 style='color:#0a1628;'>SMTP is working! &#10003;</h2>
+          <p style='color:#555;'>This is a test email from your Oasis Orchard Technologies admin panel.</p>
+          <p style='color:#888;font-size:13px;'>If you received this, your SMTP settings are correctly configured.</p>
+        ", 'SMTP test from Oasis Orchard Technologies');
+        $sent  = sendMail($to, 'Admin', 'SMTP Test — Oasis Orchard Technologies', $html);
+        $error = $GLOBALS['_mailer_last_error'] ?? '';
+        send(['sent' => $sent, 'to' => $to, 'error' => $error]);
+
+    } else err('Not found', 404);
+    break;
+
 // ═══ VOIP.MS API PROXY ═══════════════════════════════════════════
 case 'voipms':
     $u = authUser($pdo);
@@ -1044,25 +1449,18 @@ case 'voipms':
     // Allowed methods for regular users (read-only)
     $userMethods  = ['getRegistrationStatus', 'getCDR', 'getSubAccounts', 'getVoicemailMessages', 'sendSMS', 'getServersInfo'];
     // Extra methods only admins may call
-    $adminMethods = ['createSubAccount', 'delSubAccount', 'setSubAccount', 'getSubAccount'];
+    $adminMethods = ['createSubAccount', 'delSubAccount', 'setSubAccount'];
     $allowed = $u['role'] === 'admin' ? array_merge($userMethods, $adminMethods) : $userMethods;
 
     if (!$method || !in_array($method, $allowed, true)) err('Method not allowed', 403);
 
-    // Build params — strip our internal keys, inject voip.ms auth
+    // Build params — strip our internal keys (auth is injected by voipms_call)
     $params = $_GET;
     unset($params['method'], $params['all']); // clean up
-    $params['api_username'] = $cfg['voipms_api_user'];
-    $params['api_password'] = $cfg['voipms_api_pass'];
-    $params['method']       = $method;
 
-    $url = 'https://voip.ms/api/v1/rest.php?' . http_build_query($params);
-    $ctx = stream_context_create(['http' => ['timeout' => 15, 'ignore_errors' => true]]);
-    $raw = @file_get_contents($url, false, $ctx);
-    if ($raw === false) err('VoIP.ms API unreachable', 502);
-
-    $resp = json_decode($raw, true);
-    send($resp ?? ['status' => 'error', 'error' => 'Invalid response from VoIP.ms']);
+    $resp = voipms_call($cfg['voipms_api_user'], $cfg['voipms_api_pass'], $method, $params);
+    if ($resp === null) err('VoIP.ms API unreachable', 502);
+    send($resp);
     break;
 
 // ═══ VOIP.MS SUB-ACCOUNT PROVISIONING ════════════════════════════
@@ -1084,53 +1482,67 @@ case 'provision':
     $short   = preg_replace('/[^a-z0-9]/', '', strtolower(substr($target_uid, 0, 12)));
     $subname = 'u' . $short;
 
-    // Generate secure SIP password
-    $sipPass = substr(str_replace(['/', '+', '='], '', base64_encode(random_bytes(12))), 0, 12) . '@1';
+    // Generate SIP password — VoIP.ms wants 8-16 chars, letters + numbers
+    // (special characters can be rejected, so stay strictly alphanumeric)
+    $chars   = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ';
+    $sipPass = '';
+    for ($i = 0; $i < 8; $i++) $sipPass .= $chars[random_int(0, strlen($chars) - 1)];
+    $sipPass .= (string)random_int(1000, 9999); // guarantees digits; 12 chars total
 
     $apiUser = $cfg['voipms_api_user'];
     $apiPass = $cfg['voipms_api_pass'];
-    $server  = $cfg['voipms_server'] ?? 'toronto.voip.ms';
+    $server  = $cfg['voipms_server'] ?? 'webrtc.voip.ms';
+
+    // Helper: find our sub-account in a getSubAccounts response ("<mainaccount>_<subname>")
+    $findSub = function ($list) use ($subname) {
+        foreach (($list['accounts'] ?? []) as $a) {
+            $acct = $a['account'] ?? '';
+            if ($acct !== '' && substr($acct, -strlen('_' . $subname)) === '_' . $subname) return $acct;
+        }
+        return null;
+    };
 
     // Check if sub-account already exists
-    $checkUrl = 'https://voip.ms/api/v1/rest.php?' . http_build_query([
-        'api_username' => $apiUser,
-        'api_password' => $apiPass,
-        'method'       => 'getSubAccount',
-        'account'      => $subname,
-    ]);
-    $ctx  = stream_context_create(['http' => ['timeout' => 15, 'ignore_errors' => true]]);
-    $chk  = json_decode(@file_get_contents($checkUrl, false, $ctx), true);
-
-    if (!$chk || $chk['status'] !== 'success') {
-        // Create the sub-account on VoIP.ms
-        $createUrl = 'https://voip.ms/api/v1/rest.php?' . http_build_query([
-            'api_username'     => $apiUser,
-            'api_password'     => $apiPass,
-            'method'           => 'createSubAccount',
-            'username'         => $subname,
-            'password'         => $sipPass,
-            'protocol'         => 1,   // SIP
-            'auth_type'        => 1,   // Password auth
-            'device_callerid'  => '',
-            'lock_international' => 0,
-            'international_route' => 0,
-            'music_on_hold'    => 'default',
-            'allowed_codecs'   => 'ulaw;g729;gsm',
-            'dtmf_mode'        => 'rfc2833',
-            'nat'              => 'yes',
-        ]);
-        $result = json_decode(@file_get_contents($createUrl, false, $ctx), true);
-        if (!$result || $result['status'] !== 'success') {
-            err('VoIP.ms sub-account creation failed: ' . ($result['status'] ?? 'unknown'), 502);
-        }
-    } else {
-        // Already exists — use existing sub-account, reset password
-        $sipPass = null; // don't overwrite
+    $list = voipms_call($apiUser, $apiPass, 'getSubAccounts');
+    if ($list === null) err('VoIP.ms API unreachable — check the server\'s outbound internet access', 502);
+    $listStatus = $list['status'] ?? 'no_response';
+    // "no_subaccount(s)" just means none exist yet — anything else non-success is a real error
+    if ($listStatus !== 'success' && strpos($listStatus, 'no_subaccount') !== 0) {
+        err('VoIP.ms error: ' . $listStatus . voipms_error_hint($listStatus), 502);
     }
+    $sipUsername = $listStatus === 'success' ? $findSub($list) : null;
 
-    // Build full SIP username (voip.ms format: mainuser_subname)
-    $mainUser   = explode('@', $apiUser)[0]; // strip domain if email
-    $sipUsername = $apiUser . '_' . $subname; // voip.ms uses full email_sub format
+    if ($sipUsername !== null) {
+        // Already exists — reuse it, keep the stored password
+        $sipPass = null; // don't overwrite
+    } else {
+        // Create the sub-account on VoIP.ms
+        $result = voipms_call($apiUser, $apiPass, 'createSubAccount', [
+            'username'            => $subname,
+            'password'            => $sipPass,
+            'protocol'            => 1,     // SIP
+            'auth_type'           => 1,     // Password auth
+            'device_type'         => 2,     // IP PBX / softphone (required by VoIP.ms)
+            'description'         => 'Oasis Orchard user',
+            'lock_international'  => 0,
+            'international_route' => 0,
+            'music_on_hold'       => 'default',
+            'allowed_codecs'      => 'ulaw;g729;gsm',
+            'dtmf_mode'           => 'rfc2833',
+            'nat'                 => 'yes',
+        ]);
+        if (!$result || ($result['status'] ?? '') !== 'success') {
+            $status = $result['status'] ?? 'no_response';
+            err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status), 502);
+        }
+        // VoIP.ms returns the full account name ("<mainaccount>_<subname>")
+        $sipUsername = $result['account'] ?? null;
+        if (!$sipUsername) {
+            // Fallback: look it up so we never store a guessed username
+            $sipUsername = $findSub(voipms_call($apiUser, $apiPass, 'getSubAccounts') ?? []);
+        }
+        if (!$sipUsername) err('VoIP.ms sub-account created but could not resolve SIP username', 502);
+    }
 
     // Save to local DB
     $pdo->prepare(
@@ -1138,10 +1550,182 @@ case 'provision':
          ON DUPLICATE KEY UPDATE sip_username=VALUES(sip_username), sip_password=COALESCE(VALUES(sip_password), sip_password), sip_server=VALUES(sip_server)'
     )->execute([$target_uid, $sipUsername, $sipPass, $server]);
 
+    // Email user their new SIP credentials
+    trigger_voip_provisioned($pdo, $target_uid, $sipUsername, $server);
+
     // Return the account so admin can see it
     $s = $pdo->prepare('SELECT * FROM voip_accounts WHERE user_id=?');
     $s->execute([$target_uid]);
     send($s->fetch());
+    break;
+
+// ═══ SUPPORT EMAILS ═══════════════════════════════════════════════
+// POST /api/support-notify/new      — user submits support message
+// POST /api/support-notify/reply    — admin replies (admin only)
+case 'support-notify':
+    if ($method !== 'POST') err('Method not allowed', 405);
+
+    if ($r1 === 'new') {
+        $u = authUser($pdo);
+        $b = body();
+        $subject = trim($b['subject'] ?? '');
+        $message = trim($b['message'] ?? '');
+        if (!$subject || !$message) err('Subject and message required');
+        // Get user name
+        $ps = $pdo->prepare('SELECT name FROM profiles WHERE id=?');
+        $ps->execute([$u['id']]);
+        $uname = $ps->fetch()['name'] ?? '';
+        trigger_support_msg_admin($uname, $u['email'], $subject, $message);
+        send(['sent' => true]);
+
+    } elseif ($r1 === 'reply') {
+        authUser($pdo, true);
+        $b = body();
+        $toEmail = trim($b['user_email'] ?? '');
+        $toName  = trim($b['user_name']  ?? '');
+        $subject = trim($b['subject']    ?? '');
+        $message = trim($b['message']    ?? '');
+        if (!$toEmail || !$subject || !$message) err('user_email, subject, and message required');
+        trigger_support_reply_user($toEmail, $toName, $subject, $message);
+        send(['sent' => true]);
+
+    } else err('Not found', 404);
+    break;
+
+// ═══ EMAIL TEMPLATES ══════════════════════════════════════════════
+// GET    /api/email-templates          — list all
+// GET    /api/email-templates/:id      — get one
+// POST   /api/email-templates          — create
+// PUT    /api/email-templates/:id      — update
+// DELETE /api/email-templates/:id      — delete
+// POST   /api/email-templates/:id/reset — reset to default
+// POST   /api/email-templates/:id/test  — test send
+case 'email-templates':
+    authUser($pdo, true);
+    seed_email_templates(); // seed defaults on first access
+
+    if ($method === 'GET' && $r1 === null) {
+        // List all templates
+        $rows = $pdo->query("SELECT id, name, subject, variables, is_active, is_system, updated_at FROM email_templates ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$row) {
+            $row['is_active'] = (bool)$row['is_active'];
+            $row['is_system'] = (bool)$row['is_system'];
+            $row['variables'] = $row['variables'] ? json_decode($row['variables'], true) : [];
+        }
+        send($rows);
+    }
+
+    if ($method === 'GET' && $r1 !== null && $r2 === null) {
+        // Get one
+        $stmt = $pdo->prepare("SELECT * FROM email_templates WHERE id = ?");
+        $stmt->execute([$r1]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) err('Template not found', 404);
+        $row['is_active'] = (bool)$row['is_active'];
+        $row['is_system'] = (bool)$row['is_system'];
+        $row['variables'] = $row['variables'] ? json_decode($row['variables'], true) : [];
+        send($row);
+    }
+
+    if ($method === 'POST' && $r1 === null) {
+        // Create new template
+        $b = body();
+        $id      = trim($b['id'] ?? '');
+        $name    = trim($b['name'] ?? '');
+        $subject = trim($b['subject'] ?? '');
+        $body_html = trim($b['body_html'] ?? '');
+        if (!$id || !$name || !$subject || !$body_html) err('id, name, subject, and body_html are required');
+        if (!preg_match('/^[a-z0-9_-]+$/', $id)) err('id must be lowercase letters, numbers, underscores or hyphens');
+        $vars = isset($b['variables']) && is_array($b['variables']) ? json_encode($b['variables']) : null;
+        $stmt = $pdo->prepare("INSERT INTO email_templates (id, name, subject, body_html, variables, is_active, is_system) VALUES (?,?,?,?,?,1,0)");
+        try {
+            $stmt->execute([$id, $name, $subject, $body_html, $vars]);
+        } catch (\PDOException $e) {
+            if ($e->getCode() === '23000') err('A template with this ID already exists', 409);
+            throw $e;
+        }
+        $stmt2 = $pdo->prepare("SELECT * FROM email_templates WHERE id = ?");
+        $stmt2->execute([$id]);
+        $row = $stmt2->fetch(PDO::FETCH_ASSOC);
+        $row['is_active'] = (bool)$row['is_active'];
+        $row['is_system'] = (bool)$row['is_system'];
+        $row['variables'] = $row['variables'] ? json_decode($row['variables'], true) : [];
+        send($row, 201);
+    }
+
+    if ($method === 'PUT' && $r1 !== null && $r2 === null) {
+        // Update template
+        $stmt = $pdo->prepare("SELECT id FROM email_templates WHERE id = ?");
+        $stmt->execute([$r1]);
+        if (!$stmt->fetch()) err('Template not found', 404);
+        $b = body();
+        $fields = []; $params = [];
+        if (isset($b['name']))      { $fields[] = 'name = ?';      $params[] = trim($b['name']); }
+        if (isset($b['subject']))   { $fields[] = 'subject = ?';   $params[] = trim($b['subject']); }
+        if (isset($b['body_html'])) { $fields[] = 'body_html = ?'; $params[] = $b['body_html']; }
+        if (isset($b['is_active'])) { $fields[] = 'is_active = ?'; $params[] = $b['is_active'] ? 1 : 0; }
+        if (isset($b['variables'])) { $fields[] = 'variables = ?'; $params[] = is_array($b['variables']) ? json_encode($b['variables']) : $b['variables']; }
+        if ($fields) {
+            $params[] = $r1;
+            $pdo->prepare("UPDATE email_templates SET " . implode(', ', $fields) . " WHERE id = ?")->execute($params);
+        }
+        $stmt2 = $pdo->prepare("SELECT * FROM email_templates WHERE id = ?");
+        $stmt2->execute([$r1]);
+        $row = $stmt2->fetch(PDO::FETCH_ASSOC);
+        $row['is_active'] = (bool)$row['is_active'];
+        $row['is_system'] = (bool)$row['is_system'];
+        $row['variables'] = $row['variables'] ? json_decode($row['variables'], true) : [];
+        send($row);
+    }
+
+    if ($method === 'DELETE' && $r1 !== null && $r2 === null) {
+        // Delete template
+        $pdo->prepare("DELETE FROM email_templates WHERE id = ?")->execute([$r1]);
+        send(['deleted' => true]);
+    }
+
+    if ($method === 'POST' && $r1 !== null && $r2 === 'reset') {
+        // Reset template to default
+        $defaults = default_email_templates();
+        if (!isset($defaults[$r1])) err('No default for this template', 404);
+        $t = $defaults[$r1];
+        $pdo->prepare("INSERT INTO email_templates (id, name, subject, body_html, variables, is_active, is_system)
+            VALUES (?,?,?,?,?,1,1)
+            ON DUPLICATE KEY UPDATE name=VALUES(name), subject=VALUES(subject), body_html=VALUES(body_html), variables=VALUES(variables), is_system=1")
+            ->execute([$r1, $t['name'], $t['subject'], $t['body_html'], $t['variables']]);
+        $stmt = $pdo->prepare("SELECT * FROM email_templates WHERE id = ?");
+        $stmt->execute([$r1]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $row['is_active'] = (bool)$row['is_active'];
+        $row['is_system'] = (bool)$row['is_system'];
+        $row['variables'] = $row['variables'] ? json_decode($row['variables'], true) : [];
+        send($row);
+    }
+
+    if ($method === 'POST' && $r1 !== null && $r2 === 'test') {
+        // Test send a template
+        $b = body();
+        $toEmail = trim($b['email'] ?? '');
+        if (!$toEmail) err('email is required');
+        $stmt = $pdo->prepare("SELECT subject, body_html, is_active FROM email_templates WHERE id = ?");
+        $stmt->execute([$r1]);
+        $tpl = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$tpl) err('Template not found', 404);
+
+        // Render with placeholder values
+        $subject  = $tpl['subject'];
+        $bodyHtml = $tpl['body_html'];
+        // Replace any remaining {{variables}} with [sample] so the preview looks clean
+        $subject  = preg_replace('/\{\{[^}]+\}\}/', '[sample]', $subject);
+        $bodyHtml = preg_replace('/\{\{[^}]+\}\}/', '<em style="color:#1bb0ce;">[sample value]</em>', $bodyHtml);
+
+        $html = emailWrap('Test: ' . $subject, $bodyHtml);
+        $ok = sendMail($toEmail, 'Admin', '[TEST] ' . $subject, $html);
+        if (!$ok) err($GLOBALS['_mailer_last_error'] ?: 'Failed to send test email');
+        send(['sent' => true, 'to' => $toEmail]);
+    }
+
+    err('Not found', 404);
     break;
 
 default:
