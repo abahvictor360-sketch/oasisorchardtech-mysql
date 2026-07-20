@@ -134,6 +134,14 @@ export const payments = {
   saveSettings:        (data)      => req('/payments/settings', { method: 'PUT', body: data }),
   createStripeIntent:  (data)      => req('/payments/stripe/create-intent', { method: 'POST', body: data }),
   refund:              (orderId)   => req('/payments/stripe/refund',        { method: 'POST', body: { order_id: orderId } }),
+  createPlanIntent:    (planId)    => req('/payments/stripe/create-plan-intent', { method: 'POST', body: { plan_id: planId } }),
+  confirmPlan:         (intentId)  => req('/payments/stripe/confirm-plan',       { method: 'POST', body: { intent_id: intentId } }),
+};
+
+// ── Plan ──────────────────────────────────────────────────────
+export const plan = {
+  cancel:  ()       => req('/plan/cancel',  { method: 'POST' }),
+  upgrade: (planId)  => req('/plan/upgrade', { method: 'POST', body: { plan_id: planId } }),
 };
 
 // ── Orders ────────────────────────────────────────────────────

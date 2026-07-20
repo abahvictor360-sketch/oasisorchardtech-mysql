@@ -1,19 +1,17 @@
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed,
-  Wallet, Clock, Zap, AlertTriangle, CheckCircle,
+  Wallet, Clock, AlertTriangle, CheckCircle,
   TrendingUp, Info,
 } from 'lucide-react';
 import { useVoip, CALL_STATUS } from '../../context/VoipContext';
 import { useWallet } from '../../context/WalletContext';
-import { useApp } from '../../context/AppContext';
 import Softphone from '../../components/voip/Softphone';
 import SmsPanel from '../../components/voip/SmsPanel';
 import VoicemailPanel from '../../components/voip/VoicemailPanel';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import Modal from '../../components/ui/Modal';
 import EmptyState from '../../components/ui/EmptyState';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 
@@ -40,39 +38,15 @@ const STATUS_BADGE = {
   failed:    { variant: 'danger',  label: 'Failed' },
 };
 
-const TOPUP_AMOUNTS = [5, 10, 20, 50];
-
 export default function VoIP() {
   const {
-    voipEnabled, voipCredits, phoneNumber,
+    voipEnabled, phoneNumber,
     usedMinutes, planMinutes, remainingPlanMinutes,
     callHistory, providerReady, callStatus, isVoipMs,
-    topUpVoipCredits,
   } = useVoip();
-  const { balance, deduct } = useWallet();
-  const { addToast } = useApp();
-
-  const [topUpModal, setTopUpModal] = useState(false);
-  const [topUpAmt,   setTopUpAmt]   = useState('');
-  const [topping,    setTopping]    = useState(false);
+  const { balance } = useWallet();
 
   const isInCall = callStatus !== CALL_STATUS.IDLE && callStatus !== CALL_STATUS.ENDED;
-
-  const handleTopUp = async () => {
-    const amt = parseFloat(topUpAmt);
-    if (!amt || amt <= 0) { addToast('Enter a valid amount.', 'error'); return; }
-    if (balance < amt)    { addToast('Insufficient wallet balance.', 'error'); return; }
-    setTopping(true);
-    try {
-      await deduct(amt, 'call credit top-up');
-      await topUpVoipCredits(amt);
-      addToast(`$${amt.toFixed(2)} added to call credits!`, 'success');
-      setTopUpModal(false);
-      setTopUpAmt('');
-    } catch (e) {
-      addToast(e.message || 'Top-up failed.', 'error');
-    } finally { setTopping(false); }
-  };
 
   const minutePct = Math.min(100, Math.round((usedMinutes / planMinutes) * 100));
   const minuteColor = minutePct > 85 ? 'bg-red-500' : minutePct > 60 ? 'bg-yellow-500' : 'bg-[#1bb0ce]';
@@ -132,27 +106,25 @@ export default function VoIP() {
             </div>
             {remainingPlanMinutes < 30 && (
               <p className="text-xs text-amber-600 mt-2">
-                Low on plan minutes — top up call credits for overages.
+                Low on plan minutes — calls beyond this are billed from your wallet.
               </p>
             )}
           </Card>
 
-          {/* Call credits card */}
+          {/* Wallet balance card — funds all call charges */}
           <div className="bg-gradient-to-r from-[#0a1628] to-[#1bb0ce] rounded-xl p-5 text-white flex items-center justify-between gap-4">
             <div>
               <p className="text-white/70 text-sm mb-1 flex items-center gap-1.5">
-                <Zap size={14} /> Call Credits
+                <Wallet size={14} /> Wallet Balance
               </p>
-              <p className="text-3xl font-bold">{formatCurrency(voipCredits)}</p>
-              <p className="text-white/60 text-xs mt-1">Used for calls beyond your plan minutes</p>
+              <p className="text-3xl font-bold">{formatCurrency(balance)}</p>
+              <p className="text-white/60 text-xs mt-1">Calls are billed at VoIP.ms rates straight from your wallet</p>
             </div>
-            <Button
-              onClick={() => setTopUpModal(true)}
-              className="bg-white/20 hover:bg-white/30 text-white border-0 flex-shrink-0"
-              size="sm"
-            >
-              <Wallet size={14} className="mr-1" /> Top Up
-            </Button>
+            <Link to="/dashboard/wallet">
+              <Button className="bg-white/20 hover:bg-white/30 text-white border-0 flex-shrink-0" size="sm">
+                <Wallet size={14} className="mr-1" /> Top Up
+              </Button>
+            </Link>
           </div>
 
           {/* Phone number */}
@@ -268,65 +240,6 @@ export default function VoIP() {
           <VoicemailPanel />
         </div>
       )}
-
-      {/* Top Up Modal */}
-      <Modal
-        isOpen={topUpModal}
-        onClose={() => { setTopUpModal(false); setTopUpAmt(''); }}
-        title="Top Up Call Credits"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => { setTopUpModal(false); setTopUpAmt(''); }}>Cancel</Button>
-            <Button loading={topping} onClick={handleTopUp} disabled={!topUpAmt || parseFloat(topUpAmt) <= 0}>
-              Add Credits
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Credits are used for calls beyond your plan's included minutes.
-            Deducted from your wallet balance (<strong>{formatCurrency(balance)}</strong> available).
-          </p>
-          <div>
-            <p className="text-sm text-gray-600 mb-2">Quick select:</p>
-            <div className="grid grid-cols-4 gap-2">
-              {TOPUP_AMOUNTS.map(q => (
-                <button
-                  key={q}
-                  onClick={() => setTopUpAmt(String(q))}
-                  className={[
-                    'py-2 rounded-lg border text-sm font-semibold transition-all',
-                    String(topUpAmt) === String(q)
-                      ? 'bg-[#1bb0ce] text-white border-[#1bb0ce]'
-                      : 'border-gray-200 text-gray-700 hover:border-[#1bb0ce] hover:text-[#1bb0ce]',
-                  ].join(' ')}
-                >
-                  ${q}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Custom amount ($)</label>
-            <input
-              type="number" min="1" step="0.01"
-              value={topUpAmt}
-              onChange={e => setTopUpAmt(e.target.value)}
-              placeholder="0.00"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1bb0ce]/50"
-            />
-          </div>
-          {topUpAmt && parseFloat(topUpAmt) > 0 && (
-            <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800 space-y-1">
-              <p>Top-up: <strong>{formatCurrency(parseFloat(topUpAmt))}</strong></p>
-              <p className="text-xs text-blue-600">
-                At $0.014/min overage rate this covers ~{Math.floor(parseFloat(topUpAmt) / 0.014)} extra minutes.
-              </p>
-            </div>
-          )}
-        </div>
-      </Modal>
     </div>
   );
 }

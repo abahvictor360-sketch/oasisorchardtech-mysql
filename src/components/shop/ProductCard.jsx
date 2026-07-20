@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Heart, ShoppingCart, Eye } from 'lucide-react';
 import StarRating from '../ui/StarRating';
 import PriceDisplay from '../ui/PriceDisplay';
@@ -31,11 +32,13 @@ export default function ProductCard({ product, onQuickView }) {
     <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col">
       {/* Image area */}
       <div className="relative h-48 bg-gray-50 overflow-hidden">
-        <img
-          src={product.image}
-          alt={product.name}
-          className="w-full h-full object-contain p-4 hover:scale-105 transition-transform duration-300"
-        />
+        <Link to={`/shop/${product.id}`} aria-label={`View ${product.name}`}>
+          <img
+            src={product.image}
+            alt={product.name}
+            className="w-full h-full object-contain p-4 hover:scale-105 transition-transform duration-300"
+          />
+        </Link>
 
         {/* Sale badge */}
         {product.onSale && (
@@ -66,9 +69,11 @@ export default function ProductCard({ product, onQuickView }) {
         </span>
 
         {/* Product name */}
-        <h3 className="font-semibold text-[#0a1628] text-sm leading-snug truncate" title={product.name}>
-          {product.name}
-        </h3>
+        <Link to={`/shop/${product.id}`} className="hover:text-[#1bb0ce] transition-colors duration-150">
+          <h3 className="font-semibold text-[#0a1628] text-sm leading-snug truncate" title={product.name}>
+            {product.name}
+          </h3>
+        </Link>
 
         {/* SKU */}
         <p className="text-xs text-gray-400">SKU: {product.sku}</p>

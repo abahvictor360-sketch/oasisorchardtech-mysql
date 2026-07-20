@@ -88,11 +88,16 @@ export function AuthProvider({ children }) {
 
   async function updateUser(updates) {
     if (!state.user?.id) return;
+    // NOTE: the server only lets a non-admin PUT name/phone/address on their
+    // own profile (plan/wallet_balance/status are set exclusively by
+    // dedicated, server-authoritative endpoints — /plan/cancel, /plan/upgrade,
+    // /payments/stripe/confirm-plan, wallet top-up — to prevent a user
+    // granting themselves a plan or balance for free). Use refreshUser()
+    // after calling one of those endpoints to pull the real new values.
     const updated = await updateProfile(state.user.id, {
       name:    updates.name,
       phone:   updates.phone,
       address: updates.address,
-      ...(updates.plan && { plan: updates.plan }),
     });
     dispatch({
       type: 'UPDATE_USER',
@@ -100,14 +105,27 @@ export function AuthProvider({ children }) {
         name:          updated.name,
         phone:         updated.phone,
         address:       updated.address,
-        plan:          updated.plan,
-        walletBalance: parseFloat(updated.wallet_balance ?? 0),
+      },
+    });
+  }
+
+  // Re-fetches the user's own profile and syncs plan/wallet/status into
+  // state. Safe to call after any server-side action that changes them.
+  async function refreshUser() {
+    if (!state.user?.id) return;
+    const fresh = await getProfile(state.user.id);
+    dispatch({
+      type: 'UPDATE_USER',
+      payload: {
+        plan:          fresh.plan,
+        walletBalance: parseFloat(fresh.wallet_balance ?? 0),
+        status:        fresh.status,
       },
     });
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, login, signup, logout, updateUser }}>
+    <AuthContext.Provider value={{ ...state, login, signup, logout, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

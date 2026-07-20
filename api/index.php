@@ -460,6 +460,34 @@ function voipms_error_hint($status) {
     }
 }
 
+// Look up the real cost VoIP.ms billed for a call via getCDR, matching by
+// number + start time (within a small tolerance). Returns null if no match
+// (e.g. CDR hasn't posted yet), so callers can fall back to a rate estimate.
+function voipms_get_call_cost($apiUser, $apiPass, $fromNumber, $toNumber, $startedAt) {
+    $day = date('Y-m-d', strtotime($startedAt));
+    $resp = voipms_call($apiUser, $apiPass, 'getCDR', [
+        'date_from' => $day, 'date_to' => $day, 'timezone' => '0',
+    ]);
+    if (!$resp || ($resp['status'] ?? '') !== 'success' || empty($resp['cdr'])) return null;
+    $targetTs = strtotime($startedAt);
+    $best = null; $bestDiff = null;
+    foreach ($resp['cdr'] as $row) {
+        $src = preg_replace('/\D/', '', $row['source'] ?? '');
+        $dst = preg_replace('/\D/', '', $row['destination'] ?? '');
+        $fn  = preg_replace('/\D/', '', $fromNumber ?? '');
+        $tn  = preg_replace('/\D/', '', $toNumber ?? '');
+        $matchesNumbers = ($fn && (strpos($src, substr($fn, -7)) !== false || strpos($dst, substr($fn, -7)) !== false))
+            || ($tn && (strpos($src, substr($tn, -7)) !== false || strpos($dst, substr($tn, -7)) !== false));
+        if (!$matchesNumbers) continue;
+        $rowTs = strtotime($row['date'] ?? '');
+        if (!$rowTs) continue;
+        $diff = abs($rowTs - $targetTs);
+        if ($diff > 300) continue; // must be within 5 minutes of our recorded start
+        if ($bestDiff === null || $diff < $bestDiff) { $bestDiff = $diff; $best = $row; }
+    }
+    return $best ? (float)($best['total'] ?? 0) : null;
+}
+
 function make_order_id() {
     return 'ORD-' . strtoupper(substr(bin2hex(random_bytes(6)), 0, 10));
 }
@@ -978,6 +1006,54 @@ case 'wallet':
     }
     break;
 
+// ═══ PLAN ════════════════════════════════════════════════════════
+case 'plan':
+    // POST /plan/cancel — user cancels their own active plan. Only ever
+    // moves a user's plan to 'none' for themselves, so it can't be used
+    // to self-upgrade (that still requires payment, see /payments/stripe).
+    if ($r1 === 'cancel') {
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $u = authUser($pdo);
+        $s = $pdo->prepare('SELECT plan FROM profiles WHERE id=?');
+        $s->execute([$u['id']]);
+        $current = $s->fetch();
+        if (!$current || $current['plan'] === 'none') err('No active plan to cancel', 400);
+        $pdo->prepare("UPDATE profiles SET plan='none' WHERE id=?")->execute([$u['id']]);
+        $s->execute([$u['id']]);
+        send($s->fetch());
+
+    // POST /plan/upgrade — pay for a plan out of the user's own wallet
+    // balance. Price is authoritative server-side, balance is checked and
+    // deducted atomically here (never trust a client-supplied amount/plan
+    // state for something that grants paid service).
+    } elseif ($r1 === 'upgrade') {
+        if ($method !== 'POST') err('Method not allowed', 405);
+        $u = authUser($pdo);
+        $b = body();
+        $planId = $b['plan_id'] ?? '';
+        $planPrices = ['basic' => 10.00, 'smart' => 15.00, 'business' => 25.00];
+        if (!isset($planPrices[$planId])) err('Unknown plan', 400);
+        $price = $planPrices[$planId];
+
+        $s = $pdo->prepare('SELECT plan, wallet_balance FROM profiles WHERE id=?');
+        $s->execute([$u['id']]);
+        $profile = $s->fetch();
+        if (!$profile) err('User not found', 404);
+        if ($profile['plan'] === $planId) err('You are already on this plan', 400);
+        if ((float)$profile['wallet_balance'] < $price) err('Insufficient wallet balance', 400);
+
+        $newBal = (float)$profile['wallet_balance'] - $price;
+        $verb   = ($profile['plan'] === 'none' || !$profile['plan']) ? 'Subscription' : 'Upgrade';
+        $pdo->prepare('UPDATE profiles SET wallet_balance=?, plan=? WHERE id=?')->execute([$newBal, $planId, $u['id']]);
+        $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
+            ->execute([$u['id'], "$verb to plan: $planId", $price, 'debit', $newBal]);
+
+        $s->execute([$u['id']]);
+        send($s->fetch());
+
+    } else err('Not found', 404);
+    break;
+
 // ═══ PHONE CALLS ═════════════════════════════════════════════════
 case 'voip':
     $u = authUser($pdo);
@@ -1034,11 +1110,49 @@ case 'voip':
             send($s->fetch(), 201);
         } elseif ($method === 'PATCH' && $r2) {
             $b = body();
+            $s = $pdo->prepare('SELECT * FROM voip_calls WHERE id=? AND user_id=?');
+            $s->execute([$r2, $u['id']]);
+            $call = $s->fetch();
+            if (!$call) err('Call not found', 404);
+
+            $status  = $b['status'] ?? 'ended';
+            $seconds = (int)($b['duration_seconds'] ?? 0);
+            $cost    = 0.0;
+
+            // Bill the wallet only once, when the call actually ends with a
+            // real duration. Cost is computed server-side (never trust the
+            // client) using VoIP.ms's real CDR cost, falling back to the
+            // configured per-minute rate if the CDR hasn't posted yet.
+            if ($status !== 'initiated' && $status !== 'ringing' && $seconds > 0 && (float)$call['cost'] === 0.0) {
+                $rows = $pdo->query("SELECT `key`,`value` FROM voip_settings WHERE `key` IN ('voipms_api_user','voipms_api_pass','provider_config')")->fetchAll();
+                $cfg = [];
+                foreach ($rows as $row) $cfg[$row['key']] = json_decode($row['value'], true);
+                $rate = (float)($cfg['provider_config']['ratePerMinute'] ?? 0.014);
+
+                $cost = null;
+                if (!empty($cfg['voipms_api_user']) && !empty($cfg['voipms_api_pass'])) {
+                    $cost = voipms_get_call_cost(
+                        $cfg['voipms_api_user'], $cfg['voipms_api_pass'],
+                        $call['from_number'], $call['to_number'], $call['started_at']
+                    );
+                }
+                if ($cost === null) $cost = round((ceil($seconds / 60)) * $rate, 4);
+
+                if ($cost > 0) {
+                    $p = $pdo->prepare('SELECT wallet_balance FROM profiles WHERE id=?');
+                    $p->execute([$u['id']]);
+                    $profile = $p->fetch();
+                    $newBal = max(0, (float)($profile['wallet_balance'] ?? 0) - $cost);
+                    $pdo->prepare('UPDATE profiles SET wallet_balance=? WHERE id=?')->execute([$newBal, $u['id']]);
+                    $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
+                        ->execute([$u['id'], "Call charge: {$call['to_number']} ({$seconds}s)", $cost, 'debit', $newBal]);
+                }
+            }
+
             $pdo->prepare('UPDATE voip_calls SET status=?,duration_seconds=?,cost=?,ended_at=? WHERE id=? AND user_id=?')->execute([
-                $b['status']??'ended', (int)($b['duration_seconds']??0),
-                (float)($b['cost']??0), $b['ended_at']??null, $r2, $u['id'],
+                $status, $seconds, $cost, $b['ended_at']??null, $r2, $u['id'],
             ]);
-            send(['updated'=>true]);
+            send(['updated'=>true, 'cost'=>$cost]);
         }
         break;
     case 'settings':
@@ -1135,6 +1249,76 @@ case 'payments':
                 'clientSecret' => $res['data']['client_secret'],
                 'intentId'     => $res['data']['id'],
             ]);
+        } elseif ($r2 === 'create-plan-intent') {
+            // POST /payments/stripe/create-plan-intent — pay for a service plan.
+            // Prices are authoritative server-side (never trust a client-supplied
+            // amount) and MUST mirror src/data/products.js servicePlans exactly.
+            if ($method !== 'POST') err('Method not allowed', 405);
+            $u   = authUser($pdo);
+            $b   = body();
+            $cfg = pay_settings($pdo);
+            if (($cfg['stripe_enabled'] ?? 'false') !== 'true') err('Stripe not enabled', 400);
+            $planId = $b['plan_id'] ?? '';
+            $planPrices = ['basic' => 10.00, 'smart' => 15.00, 'business' => 25.00];
+            if (!isset($planPrices[$planId])) err('Unknown plan', 400);
+            $currency = strtolower($cfg['currency'] ?? 'cad');
+            $amount   = (int) round($planPrices[$planId] * 100); // cents
+            $res = stripe_curl($pdo, 'payment_intents', [
+                'amount'                  => $amount,
+                'currency'                => $currency,
+                'payment_method_types[0]' => 'card',
+                'metadata[user_id]'       => $u['id'],
+                'metadata[purpose]'       => 'plan_payment',
+                'metadata[plan_id]'       => $planId,
+            ]);
+            if ($res['error']) err('Stripe error: ' . $res['error'], 502);
+            send([
+                'clientSecret' => $res['data']['client_secret'],
+                'intentId'     => $res['data']['id'],
+                'amount'       => $planPrices[$planId],
+            ]);
+
+        } elseif ($r2 === 'confirm-plan') {
+            // POST /payments/stripe/confirm-plan — verify payment, credit the
+            // FULL amount to the user's wallet (used for calls), and activate
+            // the plan. The plan payment IS the wallet top-up, per business rule.
+            if ($method !== 'POST') err('Method not allowed', 405);
+            $u        = authUser($pdo);
+            $b        = body();
+            $intentId = trim($b['intent_id'] ?? '');
+            if (!$intentId) err('intent_id required');
+
+            $res = stripe_curl($pdo, 'payment_intents/' . $intentId, [], 'GET');
+            if ($res['error'] || ($res['status'] ?? 0) !== 200) err('Could not verify payment', 502);
+            $pi = $res['data'];
+
+            if (($pi['status'] ?? '') !== 'succeeded') err('Payment not completed');
+            if (($pi['metadata']['purpose'] ?? '') !== 'plan_payment') err('Invalid payment purpose');
+            if (($pi['metadata']['user_id'] ?? '') !== $u['id']) err('Payment user mismatch', 403);
+            $planId = $pi['metadata']['plan_id'] ?? '';
+            $planNames = ['basic' => 'Basic Connect', 'smart' => 'Smart Connect', 'business' => 'Business Connect'];
+            if (!isset($planNames[$planId])) err('Invalid plan on payment', 400);
+
+            // Idempotency — never credit the same Stripe payment twice
+            $chk = $pdo->prepare("SELECT id FROM wallet_transactions WHERE description LIKE ?");
+            $chk->execute(['%' . $intentId . '%']);
+            if ($chk->fetch()) err('This payment has already been applied', 409);
+
+            $amountDollars = $pi['amount'] / 100;
+            $s = $pdo->prepare('SELECT wallet_balance FROM profiles WHERE id=?');
+            $s->execute([$u['id']]);
+            $profile = $s->fetch();
+            if (!$profile) err('User not found', 404);
+            $newBal = (float)$profile['wallet_balance'] + $amountDollars;
+            $note   = $planNames[$planId] . ' plan payment — credited to wallet (Stripe: ' . $intentId . ')';
+
+            $pdo->prepare('UPDATE profiles SET wallet_balance=?, plan=?, status=? WHERE id=?')
+                ->execute([$newBal, $planId, 'active', $u['id']]);
+            $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
+                ->execute([$u['id'], $note, $amountDollars, 'credit', $newBal]);
+
+            send(['new_balance' => $newBal, 'amount' => $amountDollars, 'plan' => $planId]);
+
         } elseif ($r2 === 'refund') {
             // POST /payments/stripe/refund — admin refunds a paid order in full
             if ($method !== 'POST') err('Method not allowed', 405);

@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -57,13 +57,13 @@ export default function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobile
         }`}
       >
         {!collapsed && (
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2" title="Go to homepage">
             <Wifi size={20} className="text-[#1bb0ce]" />
             <div>
               <div className="text-[#1bb0ce] font-bold text-sm leading-none">Oasis Orchard</div>
               <div className="text-gray-400 text-[10px] mt-0.5">Admin Panel</div>
             </div>
-          </div>
+          </Link>
         )}
         <button
           onClick={onToggle}

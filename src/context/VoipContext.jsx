@@ -27,7 +27,7 @@ const DEFAULT_PROVIDER = {
 const VoipContext = createContext(null);
 
 export function VoipProvider({ children }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refreshUser } = useAuth();
 
   // ── Account state ─────────────────────────────────────────────
   const [voipCredits,    setVoipCredits]    = useState(0);
@@ -167,13 +167,17 @@ export function VoipProvider({ children }) {
   }
 
   // ── Derived values ────────────────────────────────────────────
+  // Calls are funded from the wallet (topped up via plan payments / wallet
+  // top-up), billed at VoIP.ms's real per-call cost — not a fixed plan
+  // minute bucket. PLAN_MINUTES is kept only for the usage display.
   const planMinutes          = PLAN_MINUTES[user?.plan] ?? PLAN_MINUTES.basic;
   const remainingPlanMinutes = Math.max(0, planMinutes - usedMinutes);
   const isVoipMs             = providerConfig.provider === 'voipms';
   const providerReady        = isVoipMs
     ? jsSipRegistered
     : (providerConfig.provider !== 'demo' && !!(providerConfig.accountSid || providerConfig.apiKey));
-  const hasCallCapacity = remainingPlanMinutes > 0 || voipCredits > 0;
+  const walletBalance   = user?.walletBalance ?? 0;
+  const hasCallCapacity = walletBalance > 0;
 
   // ── Shared hangup logic (used by both demo & JsSIP) ──────────
   const triggerHangUp = useCallback(() => {
@@ -272,32 +276,19 @@ export function VoipProvider({ children }) {
 
     setCallStatus(CALL_STATUS.ENDED);
 
-    // Billing
-    let costDollars = 0;
     if (wasAnswered && duration > 0) {
-      const callMins = Math.ceil(duration / 60);
-      const rate     = providerConfig.ratePerMinute ?? 0.014;
-      if (remainingPlanMinutes >= callMins) {
-        setUsedMinutes(u => u + callMins);
-      } else {
-        const freeMins    = remainingPlanMinutes;
-        const overageMins = callMins - freeMins;
-        costDollars = +(overageMins * rate).toFixed(4);
-        setUsedMinutes(u => u + freeMins);
-        setVoipCredits(c => +(Math.max(0, c - costDollars)).toFixed(4));
-        if (user?.id) {
-          await voipApi.patchAccount({ voip_credits: Math.max(0, voipCredits - costDollars) });
-        }
-      }
+      setUsedMinutes(u => u + Math.ceil(duration / 60));
     }
 
+    // Billing happens server-side (real VoIP.ms CDR cost, deducted straight
+    // from the wallet) — the client only reports what happened on the call.
     if (callId) {
       await voipApi.updateCall(callId, {
         status:           wasAnswered ? 'ended' : (callStatus === CALL_STATUS.RINGING ? 'missed' : 'cancelled'),
         duration_seconds: duration,
-        cost:             costDollars,
         ended_at:         new Date().toISOString(),
       });
+      if (wasAnswered && duration > 0) await refreshUser();
     }
 
     setTimeout(() => {
@@ -308,7 +299,7 @@ export function VoipProvider({ children }) {
       activeCallIdRef.current = null;
       loadHistory();
     }, 2500);
-  }, [callStatus, callDuration, remainingPlanMinutes, voipCredits, providerConfig, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [callStatus, callDuration, refreshUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Answer incoming call ──────────────────────────────────────
   const answerCall = useCallback(() => {
@@ -350,7 +341,7 @@ export function VoipProvider({ children }) {
 
   return (
     <VoipContext.Provider value={{
-      voipEnabled, voipCredits, phoneNumber,
+      voipEnabled, voipCredits, phoneNumber, walletBalance,
       usedMinutes, planMinutes, remainingPlanMinutes,
       hasCallCapacity, callHistory, providerReady, providerConfig,
       jsSipRegistered, isVoipMs,

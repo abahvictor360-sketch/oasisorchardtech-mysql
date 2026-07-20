@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Wallet,
@@ -46,12 +46,12 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         }`}
       >
         {!collapsed && (
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2" title="Go to homepage">
             <Wifi size={20} className="text-[#1bb0ce]" />
             <span className="text-[#1bb0ce] font-bold text-base">
               Oasis<span className="text-white"> Orchard</span>
             </span>
-          </div>
+          </Link>
         )}
         {/* Collapse toggle (desktop) */}
         <button
