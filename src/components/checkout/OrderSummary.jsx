@@ -10,6 +10,7 @@ export default function OrderSummary() {
     tax,
     cartTotal,
     coupon,
+    taxRatePct,
   } = useCart();
 
   return (
@@ -68,7 +69,7 @@ export default function OrderSummary() {
         </div>
         {tax > 0 && (
           <div className="flex justify-between text-gray-600">
-            <span>Tax (8%)</span>
+            <span>Tax ({taxRatePct}%)</span>
             <span className="font-mono-num">{formatCurrency(tax)}</span>
           </div>
         )}

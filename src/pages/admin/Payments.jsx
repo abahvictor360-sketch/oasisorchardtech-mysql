@@ -188,6 +188,45 @@ export default function Payments() {
             </select>
             <p className="text-xs text-gray-400 mt-1">Must match your Stripe account currency settings.</p>
           </div>
+
+          <div className="border-t border-gray-100 pt-5">
+            <h3 className="text-sm font-semibold text-[#0a1628] mb-4">Shipping &amp; Tax</h3>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium text-[#0a1628] block mb-1">Shipping Fee ($)</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  name="shipping_fee"
+                  value={cfg.shipping_fee ?? '9.99'}
+                  onChange={handleChange}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#1bb0ce]"
+                />
+                <p className="text-xs text-gray-400 mt-1">Flat fee per order. Set 0 for free shipping.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#0a1628] block mb-1">Free Shipping Over ($)</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  name="free_shipping_threshold"
+                  value={cfg.free_shipping_threshold ?? '100'}
+                  onChange={handleChange}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#1bb0ce]"
+                />
+                <p className="text-xs text-gray-400 mt-1">Orders at or above this ship free. Set 0 to disable.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-[#0a1628] block mb-1">Tax Rate (%)</label>
+                <input
+                  type="number" min="0" max="100" step="0.01"
+                  name="tax_rate"
+                  value={cfg.tax_rate ?? '0'}
+                  onChange={handleChange}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#1bb0ce]"
+                />
+                <p className="text-xs text-gray-400 mt-1">Applied to the subtotal. Set 0 to disable tax.</p>
+              </div>
+            </div>
+          </div>
         </Card>
       )}
 

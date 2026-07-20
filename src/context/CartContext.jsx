@@ -1,11 +1,13 @@
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { storage } from '../utils/storage';
+import { payments as paymentsApi } from '../lib/api';
 
 const CartContext = createContext(null);
 
+// Fallbacks — the live values come from Admin → Payments → General
 const SHIPPING_THRESHOLD = 100;
 const SHIPPING_COST = 9.99;
-const TAX_RATE = 0; // tax disabled for now — set back to 0.08 to re-enable
+const TAX_RATE = 0; // fraction, e.g. 0.08 = 8%
 
 const COUPONS = {
   'OASIS10': { type: 'percent', value: 10, label: '10% off' }
@@ -35,10 +37,27 @@ export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState(loadCart);
   const [coupon, setCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
+  const [rates, setRates] = useState({
+    shippingFee:   SHIPPING_COST,
+    freeThreshold: SHIPPING_THRESHOLD,
+    taxRate:       TAX_RATE,
+  });
 
   useEffect(() => {
     storage.set('oasis_cart', JSON.stringify(cartItems));
   }, [cartItems]);
+
+  // Load admin-configured shipping fee / free-shipping threshold / tax rate
+  useEffect(() => {
+    paymentsApi.config().then(({ data }) => {
+      if (!data) return;
+      setRates({
+        shippingFee:   data.shipping_fee            != null ? parseFloat(data.shipping_fee)            || 0 : SHIPPING_COST,
+        freeThreshold: data.free_shipping_threshold != null ? parseFloat(data.free_shipping_threshold) || 0 : SHIPPING_THRESHOLD,
+        taxRate:       data.tax_rate                != null ? (parseFloat(data.tax_rate) || 0) / 100       : TAX_RATE,
+      });
+    }).catch(() => {});
+  }, []);
 
   const addToCart = (product, quantity = 1) => {
     setCartItems(prev => {
@@ -96,8 +115,9 @@ export function CartProvider({ children }) {
   const computed = useMemo(() => {
     const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
     const cartSubtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const shipping = cartSubtotal >= SHIPPING_THRESHOLD || cartSubtotal === 0 ? 0 : SHIPPING_COST;
-    const tax = cartSubtotal * TAX_RATE;
+    const freeShipping = rates.freeThreshold > 0 && cartSubtotal >= rates.freeThreshold;
+    const shipping = freeShipping || cartSubtotal === 0 ? 0 : rates.shippingFee;
+    const tax = cartSubtotal * rates.taxRate;
 
     let discount = 0;
     if (coupon) {
@@ -109,9 +129,12 @@ export function CartProvider({ children }) {
     }
 
     const cartTotal = cartSubtotal + shipping + tax - discount;
+    // Display helpers for the summaries
+    const taxRatePct = Math.round(rates.taxRate * 10000) / 100;
+    const freeShippingThreshold = rates.freeThreshold;
 
-    return { cartCount, cartSubtotal, shipping, tax, discount, cartTotal };
-  }, [cartItems, coupon]);
+    return { cartCount, cartSubtotal, shipping, tax, discount, cartTotal, taxRatePct, freeShippingThreshold };
+  }, [cartItems, coupon, rates]);
 
   return (
     <CartContext.Provider value={{

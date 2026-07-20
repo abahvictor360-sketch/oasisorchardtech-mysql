@@ -259,6 +259,7 @@ function trigger_order_status_email($pdo, string $orderId, string $newStatus): v
             'shipped'    => ['label'=>'Shipped',   'color'=>'#2563eb','bg'=>'#eff6ff','border'=>'#bfdbfe','msg'=>'Your order is on its way!'],
             'delivered'  => ['label'=>'Delivered', 'color'=>'#16a34a','bg'=>'#f0fdf4','border'=>'#bbf7d0','msg'=>'Your order has been delivered. We hope you love it!'],
             'cancelled'  => ['label'=>'Cancelled', 'color'=>'#dc2626','bg'=>'#fef2f2','border'=>'#fecaca','msg'=>'Your order has been cancelled. Contact us if you have questions.'],
+            'refunded'   => ['label'=>'Refunded',  'color'=>'#7c3aed','bg'=>'#f5f3ff','border'=>'#ddd6fe','msg'=>'Your payment has been refunded. It may take 5-10 business days to appear on your statement.'],
         ];
         $info = $statusInfo[$newStatus] ?? ['label'=>ucfirst($newStatus),'color'=>'#555','bg'=>'#f8fafc','border'=>'#e8ecf0','msg'=>'Your order status has been updated.'];
         $sent = send_templated_mail('order_status_update', $order['shipping_email'], $order['shipping_name'], [
@@ -275,6 +276,61 @@ function trigger_order_status_email($pdo, string $orderId, string $newStatus): v
         if (!$sent) sendMail($order['shipping_email'], $order['shipping_name'],
             'Order #' . $orderId . ' — ' . ucfirst($newStatus), orderStatusEmailHtml($order, $newStatus));
     } catch (Throwable $e) { error_log('[Email] order_status: ' . $e->getMessage()); }
+}
+
+function trigger_order_confirmation($pdo, string $orderId): void {
+    try {
+        $s = $pdo->prepare('SELECT * FROM orders WHERE id=?');
+        $s->execute([$orderId]);
+        $order = $s->fetch();
+        if (!$order || empty($order['shipping_email'])) return;
+
+        $si = $pdo->prepare('SELECT * FROM order_items WHERE order_id=?');
+        $si->execute([$orderId]);
+        $items = $si->fetchAll();
+
+        $rows = '';
+        foreach ($items as $it) {
+            $pn  = htmlspecialchars($it['product_name']);
+            $qty = (int)$it['quantity'];
+            $tp  = number_format((float)$it['total_price'], 2);
+            $rows .= "<tr><td style='padding:9px 14px;color:#0a1628;font-size:13px;border-bottom:1px solid #f1f5f9;'>$pn</td>"
+                   . "<td style='padding:9px 14px;color:#888;font-size:13px;border-bottom:1px solid #f1f5f9;text-align:center;'>&times;$qty</td>"
+                   . "<td style='padding:9px 14px;color:#0a1628;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;text-align:right;'>\$$tp</td></tr>";
+        }
+        $itemsHtml = "<table width='100%' cellpadding='0' cellspacing='0' style='border:1px solid #e8ecf0;border-radius:8px;overflow:hidden;margin-bottom:16px;'>"
+                   . "<tr style='background:#f8fafc;'><th style='text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;color:#888;letter-spacing:.5px;'>Item</th>"
+                   . "<th style='padding:10px 14px;font-size:11px;text-transform:uppercase;color:#888;'>Qty</th>"
+                   . "<th style='text-align:right;padding:10px 14px;font-size:11px;text-transform:uppercase;color:#888;'>Total</th></tr>$rows</table>";
+
+        $address = implode(', ', array_filter([
+            $order['shipping_street'] ?? '',
+            $order['shipping_city'] ?? '',
+            trim(($order['shipping_state'] ?? '') . ' ' . ($order['shipping_zip'] ?? '')),
+            $order['shipping_country'] ?? '',
+        ]));
+
+        $sent = send_templated_mail('order_confirmation', $order['shipping_email'], $order['shipping_name'], [
+            'shipping_name'    => $order['shipping_name'],
+            'order_id'         => $orderId,
+            'order_date'       => date('F j, Y'),
+            'total'            => number_format((float)$order['total'], 2),
+            'payment_method'   => ucfirst($order['payment_method'] ?? 'card'),
+            'shipping_address' => htmlspecialchars($address),
+            'items_html'       => $itemsHtml,
+        ]);
+        if (!$sent) {
+            $name = htmlspecialchars($order['shipping_name']);
+            sendMail($order['shipping_email'], $order['shipping_name'], 'Order Confirmed — #' . $orderId,
+                emailWrap('Order Confirmed', "
+                <h2 style='margin:0 0 8px;color:#0a1628;font-size:20px;'>Order Confirmed &#10003;</h2>
+                <p style='color:#555;font-size:15px;margin:0 0 20px;'>Hi $name, thank you for your order! Order #$orderId has been received and paid.</p>
+                $itemsHtml
+                <p style='color:#0a1628;font-size:16px;font-weight:700;'>Total: \$" . number_format((float)$order['total'], 2) . " CAD</p>
+                <p style='color:#888;font-size:13px;'>Shipping to: " . htmlspecialchars($address) . "</p>",
+                "Order #$orderId confirmed"));
+        }
+    } catch (Throwable $e) { error_log('[Email] order_confirmation: ' . $e->getMessage()); }
 }
 
 function trigger_voip_provisioned($pdo, string $userId, string $sipUsername, string $sipServer): void {
@@ -1029,6 +1085,10 @@ case 'payments':
             'stripe_enabled'        => ($cfg['stripe_enabled'] ?? 'false') === 'true',
             'stripe_publishable_key'=> $cfg['stripe_publishable_key'] ?? '',
             'currency'              => $cfg['currency'] ?? 'CAD',
+            // Cart pricing rules (admin-configurable)
+            'shipping_fee'            => isset($cfg['shipping_fee']) && $cfg['shipping_fee'] !== '' ? (float)$cfg['shipping_fee'] : 9.99,
+            'free_shipping_threshold' => isset($cfg['free_shipping_threshold']) && $cfg['free_shipping_threshold'] !== '' ? (float)$cfg['free_shipping_threshold'] : 100,
+            'tax_rate'                => isset($cfg['tax_rate']) && $cfg['tax_rate'] !== '' ? (float)$cfg['tax_rate'] : 0,
         ]);
         break;
 
@@ -1042,7 +1102,7 @@ case 'payments':
             $b = body();
             $allowed = [
                 'stripe_enabled','stripe_publishable_key','stripe_secret_key','stripe_webhook_secret',
-                'currency',
+                'currency','shipping_fee','free_shipping_threshold','tax_rate',
             ];
             $stmt = $pdo->prepare("INSERT INTO payment_settings (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)");
             foreach ($allowed as $k) {
@@ -1074,6 +1134,38 @@ case 'payments':
                 'clientSecret' => $res['data']['client_secret'],
                 'intentId'     => $res['data']['id'],
             ]);
+        } elseif ($r2 === 'refund') {
+            // POST /payments/stripe/refund — admin refunds a paid order in full
+            if ($method !== 'POST') err('Method not allowed', 405);
+            authUser($pdo, true);
+            $b       = body();
+            $orderId = $b['order_id'] ?? '';
+            if (!$orderId) err('order_id required', 400);
+
+            $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
+            $s->execute([$orderId]);
+            $order = $s->fetch();
+            if (!$order) err('Order not found', 404);
+            if ($order['payment_status'] !== 'paid') err('Only paid orders can be refunded', 400);
+            if (empty($order['stripe_intent_id'])) err('This order has no Stripe payment to refund', 400);
+
+            $res = stripe_curl($pdo, 'refunds', ['payment_intent' => $order['stripe_intent_id']]);
+            if (!empty($res['error']) || $res['status'] >= 400) {
+                err('Stripe refund failed: ' . ($res['error'] ?: 'HTTP ' . $res['status']), 502);
+            }
+
+            $pdo->prepare("UPDATE orders SET payment_status='refunded', status='refunded' WHERE id=?")->execute([$orderId]);
+            $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
+                ->execute([$orderId, 'stripe', $res['data']['id'] ?? '',
+                           -1 * (float)($res['data']['amount'] ?? 0) / 100,
+                           strtoupper($res['data']['currency'] ?? 'cad'), 'refunded']);
+
+            // Let the customer know
+            trigger_order_status_email($pdo, $orderId, 'refunded');
+
+            $s->execute([$orderId]);
+            send($s->fetch());
+
         } elseif ($r2 === 'webhook') {
             // Stripe webhook — verify signature then update order payment status
             $payload    = file_get_contents('php://input');
@@ -1093,10 +1185,17 @@ case 'payments':
             $event = json_decode($payload, true);
             if ($event['type'] === 'payment_intent.succeeded') {
                 $pi = $event['data']['object'];
-                $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing' WHERE stripe_intent_id=?")
-                    ->execute([$pi['id']]);
-                $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) SELECT id,?,?,?,?,? FROM orders WHERE stripe_intent_id=?")
-                    ->execute(['stripe',$pi['id'],(float)$pi['amount']/100,strtoupper($pi['currency']),'succeeded',$pi['id']]);
+                $so = $pdo->prepare("SELECT id, payment_status FROM orders WHERE stripe_intent_id=?");
+                $so->execute([$pi['id']]);
+                $ord = $so->fetch();
+                // Only act once — the checkout confirm endpoint may already have handled it
+                if ($ord && $ord['payment_status'] !== 'paid') {
+                    $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing' WHERE id=?")
+                        ->execute([$ord['id']]);
+                    $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
+                        ->execute([$ord['id'],'stripe',$pi['id'],(float)$pi['amount']/100,strtoupper($pi['currency']),'succeeded']);
+                    trigger_order_confirmation($pdo, $ord['id']);
+                }
             }
             send(['received' => true]);
         } else err('Not found', 404);
@@ -1171,8 +1270,33 @@ case 'orders':
         } else err('Method not allowed', 405);
 
     } else {
-        // Single order: GET /orders/:id  PATCH /orders/:id
-        if ($method === 'GET') {
+        // Single order: GET /orders/:id  PATCH /orders/:id  POST /orders/:id/confirm
+        if ($r2 === 'confirm') {
+            // Called by checkout after Stripe confirms client-side. Payment status is
+            // verified server-side against Stripe — the client is never trusted.
+            if ($method !== 'POST') err('Method not allowed', 405);
+            $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
+            $s->execute([$r1]);
+            $order = $s->fetch();
+            if (!$order) err('Not found', 404);
+            if ($order['user_id'] !== $u['id'] && $u['role'] !== 'admin') err('Forbidden', 403);
+            if (empty($order['stripe_intent_id'])) err('No payment on this order', 400);
+
+            if ($order['payment_status'] !== 'paid') {
+                $res = stripe_curl($pdo, 'payment_intents/' . $order['stripe_intent_id'], [], 'GET');
+                $piStatus = $res['data']['status'] ?? '';
+                if ($piStatus !== 'succeeded') err('Payment not completed (status: ' . ($piStatus ?: 'unknown') . ')', 402);
+                $pdo->prepare("UPDATE orders SET payment_status='paid', status='processing' WHERE id=?")->execute([$r1]);
+                $pdo->prepare("INSERT INTO payment_transactions (order_id,provider,provider_txn_id,amount,currency,status) VALUES (?,?,?,?,?,?)")
+                    ->execute([$r1, 'stripe', $order['stripe_intent_id'],
+                               (float)($res['data']['amount'] ?? 0) / 100,
+                               strtoupper($res['data']['currency'] ?? 'cad'), 'succeeded']);
+                trigger_order_confirmation($pdo, $r1);
+            }
+            $s->execute([$r1]);
+            send($s->fetch());
+
+        } elseif ($method === 'GET') {
             $s = $pdo->prepare("SELECT * FROM orders WHERE id=?");
             $s->execute([$r1]);
             $order = $s->fetch();

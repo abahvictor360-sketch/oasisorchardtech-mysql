@@ -12,6 +12,8 @@ export default function CartSummary() {
     cartTotal,
     coupon,
     cartItems,
+    taxRatePct,
+    freeShippingThreshold,
   } = useCart();
   const navigate = useNavigate();
 
@@ -42,15 +44,15 @@ export default function CartSummary() {
           </span>
         </div>
 
-        {cartSubtotal > 0 && shipping > 0 && (
+        {cartSubtotal > 0 && shipping > 0 && freeShippingThreshold > cartSubtotal && (
           <p className="text-xs text-gray-400">
-            Add {formatCurrency(100 - cartSubtotal)} more for free shipping
+            Add {formatCurrency(freeShippingThreshold - cartSubtotal)} more for free shipping
           </p>
         )}
 
         {tax > 0 && (
           <div className="flex justify-between text-gray-600">
-            <span>Tax (8%)</span>
+            <span>Tax ({taxRatePct}%)</span>
             <span className="font-mono-num font-medium text-[#0a1628]">{formatCurrency(tax)}</span>
           </div>
         )}

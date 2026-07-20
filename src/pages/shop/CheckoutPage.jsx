@@ -118,8 +118,9 @@ export default function CheckoutPage() {
         const ok = await stripeFormRef.current?.submit();
         if (!ok) { setPlacing(false); return; }
 
-        // 3. Mark paid
-        await ordersApi.update(order.id, { payment_status: 'paid', status: 'processing' });
+        // 3. Server verifies the payment with Stripe, marks paid, emails the receipt
+        const { error: confirmErr } = await ordersApi.confirm(order.id);
+        if (confirmErr) throw new Error(confirmErr.message);
         clearCart();
         navigate('/order-success', { state: { orderId: order.id, total: cartTotal, itemCount: cartCount } });
       }

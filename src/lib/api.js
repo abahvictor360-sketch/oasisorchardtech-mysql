@@ -133,6 +133,7 @@ export const payments = {
   settings:            ()          => req('/payments/settings'),
   saveSettings:        (data)      => req('/payments/settings', { method: 'PUT', body: data }),
   createStripeIntent:  (data)      => req('/payments/stripe/create-intent', { method: 'POST', body: data }),
+  refund:              (orderId)   => req('/payments/stripe/refund',        { method: 'POST', body: { order_id: orderId } }),
 };
 
 // ── Orders ────────────────────────────────────────────────────
@@ -141,6 +142,7 @@ export const orders = {
   create: (data)     => req('/orders', { method: 'POST', body: data }),
   get:    (id)       => req(`/orders/${id}`),
   update: (id, data) => req(`/orders/${id}`, { method: 'PATCH', body: data }),
+  confirm: (id)      => req(`/orders/${id}/confirm`, { method: 'POST' }),
 };
 
 // ── Support notifications ──────────────────────────────────────

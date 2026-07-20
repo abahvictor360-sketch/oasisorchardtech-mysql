@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Eye, RefreshCw, Package } from 'lucide-react';
-import { orders as ordersApi } from '../../lib/api';
+import { Eye, RefreshCw, Package, Undo2 } from 'lucide-react';
+import { orders as ordersApi, payments as paymentsApi } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import Card from '../../components/ui/Card';
@@ -9,8 +9,8 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
-const STATUS_TABS    = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered'];
-const STATUS_OPTIONS = ['pending', 'processing', 'shipped', 'delivered'];
+const STATUS_TABS    = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refunded'];
+const STATUS_OPTIONS = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 
 const statusVariant = {
   pending:    'warning',
@@ -19,9 +19,11 @@ const statusVariant = {
   delivered:  'success',
   paid:       'success',
   failed:     'error',
+  cancelled:  'danger',
+  refunded:   'default',
 };
 
-const paymentBadge = { pending: 'warning', paid: 'success', failed: 'error' };
+const paymentBadge = { pending: 'warning', paid: 'success', failed: 'error', refunded: 'default' };
 
 export default function Orders() {
   const { addToast } = useApp();
@@ -34,6 +36,8 @@ export default function Orders() {
   const [detailItems,  setDetailItems]  = useState([]);
   const [newStatus,    setNewStatus]    = useState('');
   const [updating,     setUpdating]     = useState(false);
+  const [refundArmed,  setRefundArmed]  = useState(false);
+  const [refunding,    setRefunding]    = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -55,8 +59,27 @@ export default function Orders() {
   const openDetail = async (order) => {
     setDetailModal(order);
     setNewStatus(order.status);
+    setRefundArmed(false);
     const { data } = await ordersApi.get(order.id);
     setDetailItems(data?.items || []);
+  };
+
+  const handleRefund = async () => {
+    if (!detailModal) return;
+    if (!refundArmed) { setRefundArmed(true); return; } // first click arms, second confirms
+    setRefunding(true);
+    const { error } = await paymentsApi.refund(detailModal.id);
+    if (error) {
+      addToast('Refund failed: ' + error.message, 'error');
+    } else {
+      addToast('Payment refunded — the customer has been emailed.', 'success');
+      const patch = { payment_status: 'refunded', status: 'refunded' };
+      setOrders(prev => prev.map(o => o.id === detailModal.id ? { ...o, ...patch } : o));
+      setDetailModal(prev => ({ ...prev, ...patch }));
+      setNewStatus('refunded');
+    }
+    setRefundArmed(false);
+    setRefunding(false);
   };
 
   const handleStatusUpdate = async () => {
@@ -219,21 +242,51 @@ export default function Orders() {
             </div>
 
             {/* Update status */}
-            <div>
-              <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Update Status</h4>
-              <div className="flex gap-2">
-                <select
-                  value={newStatus}
-                  onChange={e => setNewStatus(e.target.value)}
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1bb0ce]"
-                >
-                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                </select>
-                <Button variant="primary" onClick={handleStatusUpdate} disabled={updating || newStatus === detailModal.status}>
-                  {updating ? <Spinner size="sm" color="white" /> : 'Update'}
-                </Button>
+            {detailModal.status !== 'refunded' && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Update Status</h4>
+                <div className="flex gap-2">
+                  <select
+                    value={newStatus}
+                    onChange={e => setNewStatus(e.target.value)}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1bb0ce]"
+                  >
+                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                  </select>
+                  <Button variant="primary" onClick={handleStatusUpdate} disabled={updating || newStatus === detailModal.status}>
+                    {updating ? <Spinner size="sm" color="white" /> : 'Update'}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">The customer receives an email whenever the status changes.</p>
               </div>
-            </div>
+            )}
+
+            {/* Refund */}
+            {detailModal.payment_status === 'paid' && detailModal.payment_method === 'stripe' && (
+              <div className="border-t border-gray-100 pt-4">
+                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Refund</h4>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Button
+                    variant="outline"
+                    onClick={handleRefund}
+                    disabled={refunding}
+                    className={refundArmed ? '!border-red-400 !text-red-600 hover:!bg-red-50' : ''}
+                  >
+                    {refunding
+                      ? <Spinner size="sm" />
+                      : <><Undo2 size={14} className="mr-1.5" />{refundArmed ? `Confirm refund of ${formatCurrency(detailModal.total)}?` : 'Refund payment'}</>}
+                  </Button>
+                  {refundArmed && !refunding && (
+                    <button onClick={() => setRefundArmed(false)} className="text-xs text-gray-400 hover:text-gray-600 underline">
+                      Cancel
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Refunds the full amount to the customer's card via Stripe and emails them. This cannot be undone.
+                </p>
+              </div>
+            )}
           </div>
         </Modal>
       )}
