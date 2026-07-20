@@ -10,7 +10,7 @@ import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
 const STATUS_TABS    = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Refunded'];
-const STATUS_OPTIONS = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+const STATUS_OPTIONS = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
 
 const statusVariant = {
   pending:    'warning',
@@ -242,24 +242,26 @@ export default function Orders() {
             </div>
 
             {/* Update status */}
-            {detailModal.status !== 'refunded' && (
-              <div>
-                <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Update Status</h4>
-                <div className="flex gap-2">
-                  <select
-                    value={newStatus}
-                    onChange={e => setNewStatus(e.target.value)}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1bb0ce]"
-                  >
-                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                  </select>
-                  <Button variant="primary" onClick={handleStatusUpdate} disabled={updating || newStatus === detailModal.status}>
-                    {updating ? <Spinner size="sm" color="white" /> : 'Update'}
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-400 mt-1.5">The customer receives an email whenever the status changes.</p>
+            <div>
+              <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Update Status</h4>
+              <div className="flex gap-2">
+                <select
+                  value={newStatus}
+                  onChange={e => setNewStatus(e.target.value)}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1bb0ce]"
+                >
+                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+                <Button variant="primary" onClick={handleStatusUpdate} disabled={updating || newStatus === detailModal.status}>
+                  {updating ? <Spinner size="sm" color="white" /> : 'Update'}
+                </Button>
               </div>
-            )}
+              <p className="text-xs text-gray-400 mt-1.5">
+                The customer receives an email whenever the status changes. Setting the status to
+                "Refunded" only updates the label — to actually return money to the customer's card,
+                use the Refund button below.
+              </p>
+            </div>
 
             {/* Refund */}
             {detailModal.payment_status === 'paid' && detailModal.payment_method === 'stripe' && (
