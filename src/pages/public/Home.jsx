@@ -8,7 +8,8 @@ import {
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { TestimonialsColumn } from '../../components/ui/TestimonialsColumn';
-import { products, servicePlans } from '../../data/products';
+import { servicePlans } from '../../data/products';
+import { useProducts } from '../../context/ProductsContext';
 import { useHomeLayout } from '../../hooks/useHomeLayout';
 import { usePageSection } from '../../hooks/usePageSection';
 import SEO from '../../components/seo/SEO';
@@ -235,6 +236,8 @@ function PlansSection() {
 }
 
 function ProductsSection() {
+  const { products } = useProducts();
+
   return (
     <section className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

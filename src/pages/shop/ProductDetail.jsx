@@ -14,7 +14,7 @@ import {
   RotateCcw,
   CheckCircle,
 } from 'lucide-react';
-import { products } from '../../data/products';
+import { useProducts } from '../../context/ProductsContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 import { useToast } from '../../hooks/useToast';
@@ -40,6 +40,7 @@ export default function ProductDetail() {
   const { addToCart } = useCart();
   const { toggleWishlist, isWishlisted } = useWishlist();
   const toast = useToast();
+  const { products, loading } = useProducts();
 
   const product = products.find((p) => p.id === productId);
 
@@ -47,6 +48,14 @@ export default function ProductDetail() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [copyDone, setCopyDone] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#1bb0ce] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!product) {
     return (
