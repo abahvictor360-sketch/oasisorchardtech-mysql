@@ -117,14 +117,15 @@ function StripeSubscribeModal({ targetPlan, onClose, onSuccess }) {
 
         {!loading && (
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-            <span className="text-sm text-gray-600">Plan price (added to your wallet)</span>
-            <span className="font-bold text-[#0a1628] text-lg">{formatCurrency(targetPlan.price)}</span>
+            <span className="text-sm text-gray-600">Plan price (added to your wallet, billed monthly)</span>
+            <span className="font-bold text-[#0a1628] text-lg">{formatCurrency(targetPlan.price)}/mo</span>
           </div>
         )}
 
         <p className="text-xs text-gray-400">
-          This payment is credited to your wallet balance and used to pay for calls on the platform.
-          When your balance runs low, top up any time from the Wallet page.
+          This is a recurring monthly subscription — your card is charged automatically each month
+          and the amount is credited to your wallet balance to pay for calls on the platform.
+          You can cancel any time to stop future charges.
         </p>
 
         {stripePromise && stripeOptions && (

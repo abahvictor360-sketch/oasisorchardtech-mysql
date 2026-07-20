@@ -426,6 +426,24 @@ function stripe_curl($pdo, $endpoint, $data = [], $httpMethod = 'POST') {
             'error' => ($decoded['error']['message'] ?? null)];
 }
 
+// Get (or lazily create) the Stripe Customer backing a user's recurring
+// subscriptions, persisting the id on their profile so it's reused.
+function stripe_get_or_create_customer($pdo, $u) {
+    $s = $pdo->prepare('SELECT stripe_customer_id, name FROM profiles WHERE id=?');
+    $s->execute([$u['id']]);
+    $profile = $s->fetch();
+    if ($profile && $profile['stripe_customer_id']) return $profile['stripe_customer_id'];
+
+    $res = stripe_curl($pdo, 'customers', [
+        'email'            => $u['email'] ?? '',
+        'name'             => $profile['name'] ?? '',
+        'metadata[user_id]'=> $u['id'],
+    ]);
+    if ($res['error'] || empty($res['data']['id'])) return null;
+    $pdo->prepare('UPDATE profiles SET stripe_customer_id=? WHERE id=?')->execute([$res['data']['id'], $u['id']]);
+    return $res['data']['id'];
+}
+
 // ── VoIP.ms REST call via cURL (allow_url_fopen is often disabled on shared hosts) ─
 function voipms_call($apiUser, $apiPass, $method, array $params = []) {
     $url = 'https://voip.ms/api/v1/rest.php?' . http_build_query(array_merge($params, [
@@ -1014,11 +1032,17 @@ case 'plan':
     if ($r1 === 'cancel') {
         if ($method !== 'POST') err('Method not allowed', 405);
         $u = authUser($pdo);
-        $s = $pdo->prepare('SELECT plan FROM profiles WHERE id=?');
+        $s = $pdo->prepare('SELECT plan, stripe_subscription_id FROM profiles WHERE id=?');
         $s->execute([$u['id']]);
         $current = $s->fetch();
         if (!$current || $current['plan'] === 'none') err('No active plan to cancel', 400);
-        $pdo->prepare("UPDATE profiles SET plan='none' WHERE id=?")->execute([$u['id']]);
+        // Cancel the recurring Stripe subscription too, so the card isn't
+        // charged again next cycle — errors here are logged, not fatal, so
+        // the user can still cancel locally even if Stripe is unreachable.
+        if (!empty($current['stripe_subscription_id'])) {
+            stripe_curl($pdo, 'subscriptions/' . $current['stripe_subscription_id'], [], 'DELETE');
+        }
+        $pdo->prepare("UPDATE profiles SET plan='none', stripe_subscription_id=NULL WHERE id=?")->execute([$u['id']]);
         $s->execute([$u['id']]);
         send($s->fetch());
 
@@ -1035,16 +1059,23 @@ case 'plan':
         if (!isset($planPrices[$planId])) err('Unknown plan', 400);
         $price = $planPrices[$planId];
 
-        $s = $pdo->prepare('SELECT plan, wallet_balance FROM profiles WHERE id=?');
+        $s = $pdo->prepare('SELECT plan, wallet_balance, stripe_subscription_id FROM profiles WHERE id=?');
         $s->execute([$u['id']]);
         $profile = $s->fetch();
         if (!$profile) err('User not found', 404);
         if ($profile['plan'] === $planId) err('You are already on this plan', 400);
         if ((float)$profile['wallet_balance'] < $price) err('Insufficient wallet balance', 400);
 
+        // Paying with the wallet is a one-off manual payment, not recurring —
+        // cancel any existing Stripe subscription so the card isn't also
+        // auto-charged for the old plan next cycle.
+        if (!empty($profile['stripe_subscription_id'])) {
+            stripe_curl($pdo, 'subscriptions/' . $profile['stripe_subscription_id'], [], 'DELETE');
+        }
+
         $newBal = (float)$profile['wallet_balance'] - $price;
         $verb   = ($profile['plan'] === 'none' || !$profile['plan']) ? 'Subscription' : 'Upgrade';
-        $pdo->prepare('UPDATE profiles SET wallet_balance=?, plan=? WHERE id=?')->execute([$newBal, $planId, $u['id']]);
+        $pdo->prepare('UPDATE profiles SET wallet_balance=?, plan=?, stripe_subscription_id=NULL WHERE id=?')->execute([$newBal, $planId, $u['id']]);
         $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
             ->execute([$u['id'], "$verb to plan: $planId", $price, 'debit', $newBal]);
 
@@ -1250,9 +1281,13 @@ case 'payments':
                 'intentId'     => $res['data']['id'],
             ]);
         } elseif ($r2 === 'create-plan-intent') {
-            // POST /payments/stripe/create-plan-intent — pay for a service plan.
-            // Prices are authoritative server-side (never trust a client-supplied
-            // amount) and MUST mirror src/data/products.js servicePlans exactly.
+            // POST /payments/stripe/create-plan-intent — subscribe to a service
+            // plan with RECURRING monthly billing. Prices are authoritative
+            // server-side (never trust a client-supplied amount) and MUST
+            // mirror src/data/products.js servicePlans exactly. Creates a real
+            // Stripe Subscription (inline price_data — no pre-created Price
+            // objects needed) and returns the first invoice's PaymentIntent
+            // client secret, confirmed the same way a one-time payment is.
             if ($method !== 'POST') err('Method not allowed', 405);
             $u   = authUser($pdo);
             $b   = body();
@@ -1260,28 +1295,57 @@ case 'payments':
             if (($cfg['stripe_enabled'] ?? 'false') !== 'true') err('Stripe not enabled', 400);
             $planId = $b['plan_id'] ?? '';
             $planPrices = ['basic' => 10.00, 'smart' => 15.00, 'business' => 25.00];
+            $planNames  = ['basic' => 'Basic Connect', 'smart' => 'Smart Connect', 'business' => 'Business Connect'];
             if (!isset($planPrices[$planId])) err('Unknown plan', 400);
             $currency = strtolower($cfg['currency'] ?? 'cad');
             $amount   = (int) round($planPrices[$planId] * 100); // cents
-            $res = stripe_curl($pdo, 'payment_intents', [
-                'amount'                  => $amount,
-                'currency'                => $currency,
-                'payment_method_types[0]' => 'card',
-                'metadata[user_id]'       => $u['id'],
-                'metadata[purpose]'       => 'plan_payment',
-                'metadata[plan_id]'       => $planId,
+
+            $customerId = stripe_get_or_create_customer($pdo, $u);
+            if (!$customerId) err('Could not set up Stripe customer', 502);
+
+            // Switching plans while an old Stripe subscription is still
+            // active would double-bill the card — cancel it first.
+            $existingSub = $pdo->prepare('SELECT stripe_subscription_id FROM profiles WHERE id=?');
+            $existingSub->execute([$u['id']]);
+            $oldSubId = $existingSub->fetchColumn();
+            if ($oldSubId) {
+                stripe_curl($pdo, 'subscriptions/' . $oldSubId, [], 'DELETE');
+                $pdo->prepare('UPDATE profiles SET stripe_subscription_id=NULL WHERE id=?')->execute([$u['id']]);
+            }
+
+            $res = stripe_curl($pdo, 'subscriptions', [
+                'customer' => $customerId,
+                'items'    => [[
+                    'price_data' => [
+                        'currency'    => $currency,
+                        'unit_amount' => $amount,
+                        'recurring'   => ['interval' => 'month'],
+                        'product_data'=> ['name' => $planNames[$planId] . ' — Monthly Plan'],
+                    ],
+                ]],
+                'payment_behavior' => 'default_incomplete',
+                'payment_settings' => ['save_default_payment_method' => 'on_subscription'],
+                'expand'   => ['latest_invoice.payment_intent'],
+                'metadata' => ['user_id' => $u['id'], 'purpose' => 'plan_payment', 'plan_id' => $planId],
             ]);
             if ($res['error']) err('Stripe error: ' . $res['error'], 502);
+            $sub = $res['data'];
+            $clientSecret = $sub['latest_invoice']['payment_intent']['client_secret'] ?? null;
+            if (!$clientSecret) err('Stripe did not return a payment intent', 502);
+
             send([
-                'clientSecret' => $res['data']['client_secret'],
-                'intentId'     => $res['data']['id'],
-                'amount'       => $planPrices[$planId],
+                'clientSecret'   => $clientSecret,
+                'intentId'       => $sub['latest_invoice']['payment_intent']['id'],
+                'subscriptionId' => $sub['id'],
+                'amount'         => $planPrices[$planId],
             ]);
 
         } elseif ($r2 === 'confirm-plan') {
-            // POST /payments/stripe/confirm-plan — verify payment, credit the
-            // FULL amount to the user's wallet (used for calls), and activate
-            // the plan. The plan payment IS the wallet top-up, per business rule.
+            // POST /payments/stripe/confirm-plan — verify the subscription's
+            // first invoice payment succeeded, credit the FULL amount to the
+            // user's wallet (used for calls), activate the plan, and remember
+            // the subscription id so future renewals (billed automatically by
+            // Stripe) are handled by the webhook below.
             if ($method !== 'POST') err('Method not allowed', 405);
             $u        = authUser($pdo);
             $b        = body();
@@ -1304,16 +1368,23 @@ case 'payments':
             $chk->execute(['%' . $intentId . '%']);
             if ($chk->fetch()) err('This payment has already been applied', 409);
 
+            // Find the subscription this invoice/payment belongs to, if any
+            $subId = null;
+            $inv = stripe_curl($pdo, 'invoices?payment_intent=' . urlencode($intentId), [], 'GET');
+            if (!$inv['error'] && !empty($inv['data']['data'][0]['subscription'])) {
+                $subId = $inv['data']['data'][0]['subscription'];
+            }
+
             $amountDollars = $pi['amount'] / 100;
             $s = $pdo->prepare('SELECT wallet_balance FROM profiles WHERE id=?');
             $s->execute([$u['id']]);
             $profile = $s->fetch();
             if (!$profile) err('User not found', 404);
             $newBal = (float)$profile['wallet_balance'] + $amountDollars;
-            $note   = $planNames[$planId] . ' plan payment — credited to wallet (Stripe: ' . $intentId . ')';
+            $note   = $planNames[$planId] . ' plan subscription — credited to wallet (Stripe: ' . $intentId . ')';
 
-            $pdo->prepare('UPDATE profiles SET wallet_balance=?, plan=?, status=? WHERE id=?')
-                ->execute([$newBal, $planId, 'active', $u['id']]);
+            $pdo->prepare('UPDATE profiles SET wallet_balance=?, plan=?, status=?, stripe_subscription_id=? WHERE id=?')
+                ->execute([$newBal, $planId, 'active', $subId, $u['id']]);
             $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
                 ->execute([$u['id'], $note, $amountDollars, 'credit', $newBal]);
 
@@ -1381,6 +1452,35 @@ case 'payments':
                         ->execute([$ord['id'],'stripe',$pi['id'],(float)$pi['amount']/100,strtoupper($pi['currency']),'succeeded']);
                     trigger_order_confirmation($pdo, $ord['id']);
                 }
+            } elseif ($event['type'] === 'invoice.payment_succeeded') {
+                // Recurring plan renewal — Stripe auto-charged the saved card
+                // for the next billing cycle. Credit the wallet again, same as
+                // the initial subscription payment. The very first invoice
+                // (billing_reason=subscription_create) is already handled by
+                // /payments/stripe/confirm-plan, so only act on renewals here.
+                $inv = $event['data']['object'];
+                if (($inv['billing_reason'] ?? '') === 'subscription_cycle' && !empty($inv['subscription'])) {
+                    $s = $pdo->prepare("SELECT id, wallet_balance FROM profiles WHERE stripe_subscription_id=?");
+                    $s->execute([$inv['subscription']]);
+                    $profile = $s->fetch();
+                    if ($profile) {
+                        $chk = $pdo->prepare("SELECT id FROM wallet_transactions WHERE description LIKE ?");
+                        $chk->execute(['%' . $inv['id'] . '%']);
+                        if (!$chk->fetch()) {
+                            $amount = (float)($inv['amount_paid'] ?? 0) / 100;
+                            $newBal = (float)$profile['wallet_balance'] + $amount;
+                            $pdo->prepare("UPDATE profiles SET wallet_balance=?, status='active' WHERE id=?")
+                                ->execute([$newBal, $profile['id']]);
+                            $pdo->prepare('INSERT INTO wallet_transactions (user_id,description,amount,type,balance_after) VALUES (?,?,?,?,?)')
+                                ->execute([$profile['id'], "Plan renewal — credited to wallet (Stripe invoice: {$inv['id']})", $amount, 'credit', $newBal]);
+                        }
+                    }
+                }
+            } elseif ($event['type'] === 'customer.subscription.deleted') {
+                // Subscription ended (cancelled, or payment retries exhausted)
+                $sub = $event['data']['object'];
+                $pdo->prepare("UPDATE profiles SET plan='none', stripe_subscription_id=NULL WHERE stripe_subscription_id=?")
+                    ->execute([$sub['id']]);
             }
             send(['received' => true]);
         } else err('Not found', 404);
@@ -1511,6 +1611,63 @@ case 'orders':
 
         } else err('Method not allowed', 405);
     }
+    break;
+
+// ═══ ADMIN DASHBOARD STATS ═════════════════════════════════════════
+case 'stats':
+    authUser($pdo, true);
+    if ($method !== 'GET') err('Method not allowed', 405);
+
+    $totalUsers = (int)$pdo->query("SELECT COUNT(*) FROM profiles")->fetchColumn();
+
+    // Revenue = sum of paid orders. A refund flips payment_status to
+    // 'refunded', so it naturally drops out of this sum with no extra
+    // bookkeeping — this starts at $0 and only grows with real sales.
+    $totalRevenue = (float)$pdo->query("SELECT COALESCE(SUM(total),0) FROM orders WHERE payment_status='paid'")->fetchColumn();
+
+    $ordersToday = (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE DATE(created_at)=CURDATE()")->fetchColumn();
+
+    $openTickets = (int)$pdo->query("SELECT COUNT(*) FROM support_tickets WHERE status='open'")->fetchColumn();
+
+    $monthlyRows = $pdo->query("
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, DATE_FORMAT(created_at, '%b') AS month, SUM(total) AS revenue
+        FROM orders
+        WHERE payment_status='paid' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+        GROUP BY ym, month
+        ORDER BY ym ASC
+    ")->fetchAll();
+    $monthlyRevenue = array_map(fn($r) => ['month' => $r['month'], 'revenue' => (float)$r['revenue']], $monthlyRows);
+
+    $planNames = ['basic' => 'Basic Connect', 'smart' => 'Smart Connect', 'business' => 'Business Connect'];
+    $planRows = $pdo->query("SELECT plan, COUNT(*) AS c FROM profiles WHERE plan IN ('basic','smart','business') GROUP BY plan")->fetchAll();
+    $planDistribution = array_map(fn($r) => ['name' => $planNames[$r['plan']] ?? $r['plan'], 'value' => (int)$r['c']], $planRows);
+
+    $categoryRows = $pdo->query("
+        SELECT p.category AS category, SUM(oi.total_price) AS value
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        LEFT JOIN products p ON p.id = oi.product_id
+        WHERE o.payment_status='paid'
+        GROUP BY p.category
+    ")->fetchAll();
+    $categoryLabel = ['home-phone' => 'Home Phone', 'mobile' => 'Mobile'];
+    $categorySales = array_map(fn($r) => ['name' => $categoryLabel[$r['category']] ?? ($r['category'] ?: 'Other'), 'value' => (float)$r['value']], $categoryRows);
+
+    $recentOrders = $pdo->query("
+        SELECT o.id, o.total, o.status, o.created_at AS date, o.shipping_name AS customer_name
+        FROM orders o ORDER BY o.created_at DESC LIMIT 5
+    ")->fetchAll();
+
+    send([
+        'totalUsers'       => $totalUsers,
+        'totalRevenue'     => $totalRevenue,
+        'ordersToday'      => $ordersToday,
+        'openTickets'      => $openTickets,
+        'monthlyRevenue'   => $monthlyRevenue,
+        'planDistribution' => $planDistribution,
+        'categorySales'    => $categorySales,
+        'recentOrders'     => $recentOrders,
+    ]);
     break;
 
 // ═══ NOTIFICATIONS ═══════════════════════════════════════════════

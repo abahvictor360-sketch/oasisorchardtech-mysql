@@ -138,6 +138,11 @@ export const payments = {
   confirmPlan:         (intentId)  => req('/payments/stripe/confirm-plan',       { method: 'POST', body: { intent_id: intentId } }),
 };
 
+// ── Admin stats ──────────────────────────────────────────────────
+export const stats = {
+  get: () => req('/stats'),
+};
+
 // ── Plan ──────────────────────────────────────────────────────
 export const plan = {
   cancel:  ()       => req('/plan/cancel',  { method: 'POST' }),
