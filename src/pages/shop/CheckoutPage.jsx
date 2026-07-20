@@ -75,7 +75,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (isAuthenticated && paymentMethod === 'stripe' && payConfig?.stripe_enabled && !clientSecret && cartTotal > 0) {
       paymentsApi.createStripeIntent({ total: cartTotal }).then(({ data, error }) => {
-        if (error) { addToast('Could not load payment form. Please try again.', 'error'); return; }
+        if (error) { addToast('Could not load payment form: ' + (error.message || 'please try again.'), 'error'); return; }
         setClientSecret(data.clientSecret);
         setIntentId(data.intentId);
       });
@@ -100,6 +100,10 @@ export default function CheckoutPage() {
   }), [cartItems, cartTotal, paymentMethod, formData]);
 
   // ── Place order (Stripe) ──────────────────────────────────────
+  // Keeps the pending order across retries so a failed payment attempt
+  // doesn't create duplicate orders when the user clicks again.
+  const pendingOrderRef = useRef(null);
+
   const handlePlaceOrder = async () => {
     const errs = validateForm(formData);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
@@ -108,11 +112,16 @@ export default function CheckoutPage() {
 
     try {
       if (paymentMethod === 'stripe') {
-        // 1. Save order to DB (pending payment)
-        const { data: order, error: orderErr } = await ordersApi.create(
-          buildOrder({ stripe_intent_id: intentId })
-        );
-        if (orderErr) throw new Error(orderErr.message);
+        // 1. Save order to DB (pending payment) — reuse it on retry
+        let order = pendingOrderRef.current;
+        if (!order) {
+          const { data, error: orderErr } = await ordersApi.create(
+            buildOrder({ stripe_intent_id: intentId })
+          );
+          if (orderErr) throw new Error(orderErr.message);
+          order = data;
+          pendingOrderRef.current = order;
+        }
 
         // 2. Confirm Stripe payment
         const ok = await stripeFormRef.current?.submit();
@@ -121,6 +130,7 @@ export default function CheckoutPage() {
         // 3. Server verifies the payment with Stripe, marks paid, emails the receipt
         const { error: confirmErr } = await ordersApi.confirm(order.id);
         if (confirmErr) throw new Error(confirmErr.message);
+        pendingOrderRef.current = null;
         clearCart();
         navigate('/order-success', { state: { orderId: order.id, total: cartTotal, itemCount: cartCount } });
       }

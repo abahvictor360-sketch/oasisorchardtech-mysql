@@ -921,7 +921,7 @@ case 'wallet':
         $res = stripe_curl($pdo, 'payment_intents', [
             'amount'                             => $amount,
             'currency'                           => $currency,
-            'automatic_payment_methods[enabled]' => 'true',
+            'payment_method_types[0]'            => 'card',
             'metadata[user_id]'                  => $u['id'],
             'metadata[purpose]'                  => 'wallet_topup',
         ]);
@@ -1123,10 +1123,11 @@ case 'payments':
             $currency = strtolower($cfg['currency'] ?? 'cad');
             $amount   = (int)(round((float)($b['total'] ?? 0), 2) * 100); // cents
             if ($amount < 50) err('Amount too small', 400);
+            // Card only — redirect-based methods (Klarna etc.) aren't handled by this flow
             $res = stripe_curl($pdo, 'payment_intents', [
                 'amount'                     => $amount,
                 'currency'                   => $currency,
-                'automatic_payment_methods[enabled]' => 'true',
+                'payment_method_types[0]'    => 'card',
                 'metadata[user_id]'          => $u['id'],
             ]);
             if ($res['error']) err('Stripe error: ' . $res['error'], 502);
