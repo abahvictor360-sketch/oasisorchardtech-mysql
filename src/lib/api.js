@@ -1,8 +1,10 @@
 // ── API client — replaces @supabase/supabase-js ───────────────
+import { storage } from '../utils/storage';
+
 const BASE = '/api';
 
 async function req(path, options = {}) {
-  const token = localStorage.getItem('oasis_token');
+  const token = storage.get('oasis_token');
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -22,7 +24,7 @@ async function req(path, options = {}) {
 export const auth = {
   async signInWithPassword({ email, password }) {
     const { data, error } = await req('/auth/login', { method: 'POST', body: { email, password } });
-    if (!error && data?.token) localStorage.setItem('oasis_token', data.token);
+    if (!error && data?.token) storage.set('oasis_token', data.token);
     return { data, error };
   },
 
@@ -32,7 +34,7 @@ export const auth = {
 
   async signOut() {
     await req('/auth/logout', { method: 'POST' });
-    localStorage.removeItem('oasis_token');
+    storage.remove('oasis_token');
     return { error: null };
   },
 
@@ -57,7 +59,7 @@ export const auth = {
   },
 
   async getSession() {
-    const token = localStorage.getItem('oasis_token');
+    const token = storage.get('oasis_token');
     if (!token) return { data: { session: null }, error: null };
     const { data, error } = await req('/auth/me');
     if (error) return { data: { session: null }, error };
@@ -71,7 +73,7 @@ export const auth = {
 
   // Compatibility shim — immediate callback on mount, no real subscription
   onAuthStateChange(callback) {
-    const token = localStorage.getItem('oasis_token');
+    const token = storage.get('oasis_token');
     if (token) {
       req('/auth/me').then(({ data, error }) => {
         if (!error && data?.user) callback('SIGNED_IN', { user: data.user });

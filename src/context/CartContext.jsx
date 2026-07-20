@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { storage } from '../utils/storage';
 
 const CartContext = createContext(null);
 
@@ -23,7 +24,7 @@ function normalizeItem(item) {
 
 function loadCart() {
   try {
-    const stored = localStorage.getItem('oasis_cart');
+    const stored = storage.get('oasis_cart');
     return stored ? JSON.parse(stored).map(normalizeItem) : [];
   } catch {
     return [];
@@ -36,7 +37,7 @@ export function CartProvider({ children }) {
   const [couponError, setCouponError] = useState('');
 
   useEffect(() => {
-    localStorage.setItem('oasis_cart', JSON.stringify(cartItems));
+    storage.set('oasis_cart', JSON.stringify(cartItems));
   }, [cartItems]);
 
   const addToCart = (product, quantity = 1) => {

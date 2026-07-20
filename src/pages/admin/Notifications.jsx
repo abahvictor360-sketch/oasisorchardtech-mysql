@@ -5,11 +5,12 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 import { smtp as smtpApi } from '../../lib/api';
+import { storage } from '../../utils/storage';
 
 const BASE = '/api';
 
 async function apiReq(path, options = {}) {
-  const token = localStorage.getItem('oasis_token');
+  const token = storage.get('oasis_token');
   const res = await fetch(BASE + path, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...options.headers },

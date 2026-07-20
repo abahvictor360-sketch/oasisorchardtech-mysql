@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { storage } from '../utils/storage';
 
 const WishlistContext = createContext(null);
 
 function loadWishlist() {
   try {
-    const stored = localStorage.getItem('oasis_wishlist');
+    const stored = storage.get('oasis_wishlist');
     return stored ? JSON.parse(stored) : [];
   } catch {
     return [];
@@ -15,7 +16,7 @@ export function WishlistProvider({ children }) {
   const [wishlistItems, setWishlistItems] = useState(loadWishlist);
 
   useEffect(() => {
-    localStorage.setItem('oasis_wishlist', JSON.stringify(wishlistItems));
+    storage.set('oasis_wishlist', JSON.stringify(wishlistItems));
   }, [wishlistItems]);
 
   const toggleWishlist = (product) => {

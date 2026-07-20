@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Home, ChevronRight, Lock } from 'lucide-react';
+import { Home, ChevronRight, Lock, LogIn, UserPlus } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../../context/CartContext';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { payments as paymentsApi, orders as ordersApi } from '../../lib/api';
 import CheckoutForm from '../../components/checkout/CheckoutForm';
 import PaymentMethod from '../../components/checkout/PaymentMethod';
@@ -27,6 +28,7 @@ function validateForm(data) {
 export default function CheckoutPage() {
   const navigate    = useNavigate();
   const { addToast } = useApp();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const { cartItems, cartTotal, cartCount, clearCart } = useCart();
 
   // ── Form state ────────────────────────────────────────────────
@@ -61,15 +63,16 @@ export default function CheckoutPage() {
   }, []);
 
   // ── Create Stripe PaymentIntent when stripe selected ──────────
+  // Requires a signed-in user — the guard below shows a login prompt otherwise.
   useEffect(() => {
-    if (paymentMethod === 'stripe' && payConfig?.stripe_enabled && !clientSecret && cartTotal > 0) {
+    if (isAuthenticated && paymentMethod === 'stripe' && payConfig?.stripe_enabled && !clientSecret && cartTotal > 0) {
       paymentsApi.createStripeIntent({ total: cartTotal }).then(({ data, error }) => {
         if (error) { addToast('Could not load payment form. Please try again.', 'error'); return; }
         setClientSecret(data.clientSecret);
         setIntentId(data.intentId);
       });
     }
-  }, [paymentMethod, payConfig, clientSecret, cartTotal]);
+  }, [isAuthenticated, paymentMethod, payConfig, clientSecret, cartTotal]);
 
   // ── Redirect empty cart ───────────────────────────────────────
   useEffect(() => {
@@ -127,7 +130,7 @@ export default function CheckoutPage() {
     },
   }), [clientSecret]);
 
-  const showPlaceOrderBtn = paymentMethod === 'stripe';
+  const showPlaceOrderBtn = paymentMethod === 'stripe' && isAuthenticated;
 
   // ── Render ────────────────────────────────────────────────────
   const paymentPanel = (
@@ -177,7 +180,29 @@ export default function CheckoutPage() {
                 Payment Method
               </h2>
 
-              {payConfig?.stripe_enabled && clientSecret ? (
+              {!authLoading && !isAuthenticated ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                  <p className="text-sm font-semibold text-[#0a1628] mb-1">Sign in to complete your order</p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    You need an account to place an order so we can send your receipt and let you
+                    track it. Your cart is saved — you'll come right back here.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      to="/login?redirect=/checkout"
+                      className="inline-flex items-center gap-2 bg-[#1bb0ce] hover:bg-[#159bb8] text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+                    >
+                      <LogIn size={15} /> Sign In
+                    </Link>
+                    <Link
+                      to="/signup"
+                      className="inline-flex items-center gap-2 border border-gray-200 hover:border-[#1bb0ce] text-gray-700 hover:text-[#1bb0ce] text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors bg-white"
+                    >
+                      <UserPlus size={15} /> Create Account
+                    </Link>
+                  </div>
+                </div>
+              ) : payConfig?.stripe_enabled && clientSecret ? (
                 <Elements stripe={stripePromise} options={stripeOptions}>
                   {paymentPanel}
                 </Elements>
