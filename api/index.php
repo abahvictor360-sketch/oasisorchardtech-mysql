@@ -1822,6 +1822,13 @@ case 'provision':
     $target_uid = $b['user_id'] ?? null;
     if (!$target_uid) err('user_id required', 400);
 
+    // Look up the user's email — used as the VoIP.ms sub-account description
+    // so accounts are identifiable in the VoIP.ms portal
+    $urow = $pdo->prepare('SELECT email FROM profiles WHERE id=?');
+    $urow->execute([$target_uid]);
+    $userEmail  = $urow->fetchColumn() ?: '';
+    $subDescription = $userEmail !== '' ? $userEmail : 'Oasis Orchard user';
+
     // Generate unique sub-account name — VoIP.ms caps usernames at 12 chars,
     // longer names get truncated on their side and then never match ours
     $short   = preg_replace('/[^a-z0-9]/', '', strtolower(substr($target_uid, 0, 11)));
@@ -1857,7 +1864,7 @@ case 'provision':
         'protocol'            => 1,     // SIP
         'auth_type'           => 1,     // Password auth
         'device_type'         => 2,     // IP PBX / softphone (required by VoIP.ms)
-        'description'         => 'Oasis Orchard user',
+        'description'         => $subDescription, // the user's email
         'lock_international'  => 0,
         'international_route' => 1,     // 1 = Value route; VoIP.ms rejects 0 as "missing"
         'music_on_hold'       => 'default',
@@ -1876,6 +1883,18 @@ case 'provision':
         ]));
         if (!$reset || ($reset['status'] ?? '') !== 'success') $sipPass = null;
         return $entry['account'];
+    };
+
+    // Look for our sub-account, retrying a few times. After createSubAccount,
+    // VoIP.ms can take a moment to index the new account, so a single immediate
+    // getSubAccounts may not return it yet — retry before deciding it's absent.
+    $findWithRetry = function ($attempts = 4) use ($apiUser, $apiPass, $findSub) {
+        for ($i = 0; $i < $attempts; $i++) {
+            $entry = $findSub(voipms_call($apiUser, $apiPass, 'getSubAccounts') ?? []);
+            if ($entry) return $entry;
+            if ($i < $attempts - 1) sleep(2);
+        }
+        return null;
     };
 
     // Check if sub-account already exists
@@ -1899,8 +1918,9 @@ case 'provision':
         if ($status !== 'success') {
             // The create may still have gone through on VoIP.ms's side —
             // timeouts ("no_response") and used_username both mean the account
-            // can exist even though we saw a failure. Re-list before erroring.
-            $existing = $findSub(voipms_call($apiUser, $apiPass, 'getSubAccounts') ?? []);
+            // can exist even though we saw a failure. Re-list (with retries, to
+            // ride out indexing delay) before treating it as a real failure.
+            $existing = $findWithRetry();
             if (!$existing) err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status), 502);
             $sipUsername = $reuse($existing);
         } else {
@@ -1908,7 +1928,7 @@ case 'provision':
             $sipUsername = $result['account'] ?? null;
             if (!$sipUsername) {
                 // Fallback: look it up so we never store a guessed username
-                $entry       = $findSub(voipms_call($apiUser, $apiPass, 'getSubAccounts') ?? []);
+                $entry       = $findWithRetry();
                 $sipUsername = $entry['account'] ?? null;
             }
             if (!$sipUsername) err('VoIP.ms sub-account created but could not resolve SIP username', 502);
