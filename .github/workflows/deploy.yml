@@ -31,7 +31,8 @@ jobs:
         run: |
           mkdir -p deploy/api
           cp -r dist/. deploy/
-          cp api/index.php api/.htaccess api/config.php deploy/api/
+          # Copy the WHOLE api folder (index.php requires mailer.php + phpmailer/)
+          cp -r api/. deploy/api/
           # config.php contains NO secrets — it loads credentials from
           # oasis-config.php which lives OUTSIDE public_html on the server.
 
