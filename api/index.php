@@ -1845,17 +1845,26 @@ case 'provision':
     $apiPass = $cfg['voipms_api_pass'];
     $server  = $cfg['voipms_server'] ?? 'webrtc.voip.ms';
 
-    // Helper: find our sub-account entry in a getSubAccounts response
-    // ("<mainaccount>_<subname>"). Also matches names an older code version
-    // created before the 12-char limit was enforced — VoIP.ms truncates, so
-    // the stored name can be a prefix of ours. Returns the full entry.
-    $findSub = function ($list) use ($subname) {
+    // Helper: find our sub-account entry in a getSubAccounts response.
+    // Checked two independent ways so a mismatch in one doesn't cause a false
+    // "not found": (1) the description is the user's email — exact and
+    // unambiguous, doesn't depend on any assumption about how VoIP.ms formats
+    // the account name; (2) the account name ("<mainaccount>_<subname>")
+    // matches ours, also handling truncated names an older code version
+    // created before the 12-char limit was enforced. Returns the full entry.
+    $findSub = function ($list) use ($subname, $userEmail) {
         foreach (($list['accounts'] ?? []) as $a) {
+            $desc = $a['description'] ?? '';
+            if ($userEmail !== '' && $desc === $userEmail) return $a;
+
             $acct = $a['account'] ?? '';
-            $pos  = strrpos($acct, '_');
-            if ($pos === false) continue;
-            $sub = substr($acct, $pos + 1);
-            if ($sub === $subname || (strlen($sub) >= 8 && strpos($subname, $sub) === 0)) return $a;
+            if ($acct === '') continue;
+            $pos = strrpos($acct, '_');
+            $sub = $pos !== false ? substr($acct, $pos + 1) : $acct;
+            if ($sub === $subname
+                || (strlen($sub) >= 8 && strpos($subname, $sub) === 0)      // stored name truncated vs. ours
+                || (strlen($subname) >= 8 && strpos($sub, $subname) === 0)  // ours truncated vs. stored
+            ) return $a;
         }
         return null;
     };
@@ -1921,7 +1930,21 @@ case 'provision':
             // can exist even though we saw a failure. Re-list (with retries, to
             // ride out indexing delay) before treating it as a real failure.
             $existing = $findWithRetry();
-            if (!$existing) err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status), 502);
+            if (!$existing) {
+                // Surface what VoIP.ms actually has for this account so a real
+                // mismatch (vs. a genuine failure) is diagnosable from the error
+                // alone, instead of guessing again next time this happens.
+                $dump = voipms_call($apiUser, $apiPass, 'getSubAccounts');
+                $seen = array_map(
+                    fn($a) => ($a['account'] ?? '?') . ' (' . ($a['description'] ?? '') . ')',
+                    $dump['accounts'] ?? []
+                );
+                error_log('[VoIP.ms provision] wanted subname=' . $subname . ' email=' . $userEmail
+                    . ' — accounts seen: ' . ($seen ? implode(', ', $seen) : 'none'));
+                err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status)
+                    . '. If you can see the account on voip.ms already, wait a minute and try Provision again — '
+                    . 'the account may just need more time to appear in the API.', 502);
+            }
             $sipUsername = $reuse($existing);
         } else {
             // VoIP.ms returns the full account name ("<mainaccount>_<subname>")
