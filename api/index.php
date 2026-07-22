@@ -1866,7 +1866,7 @@ case 'provision':
             'device_type'         => 2,     // IP PBX / softphone (required by VoIP.ms)
             'description'         => 'Oasis Orchard user',
             'lock_international'  => 0,
-            'international_route' => 0,
+            'international_route' => 1, // 1 = Value route; VoIP.ms rejects 0 as "missing"
             'music_on_hold'       => 'default',
             'allowed_codecs'      => 'ulaw;g729;gsm',
             'dtmf_mode'           => 'rfc2833',
