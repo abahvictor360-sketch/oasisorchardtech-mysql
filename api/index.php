@@ -454,7 +454,10 @@ function voipms_call($apiUser, $apiPass, $method, array $params = []) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
+        // createSubAccount and friends can be slow on VoIP.ms's side; a short
+        // timeout makes us report failure for operations that actually succeeded
+        CURLOPT_TIMEOUT        => 45,
+        CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_SSL_VERIFYPEER => true,
     ]);
     $raw = curl_exec($ch);
@@ -1893,13 +1896,13 @@ case 'provision':
             'password' => $sipPass,
         ]));
         $status = $result['status'] ?? 'no_response';
-        if ($status === 'used_username') {
-            // Exists on VoIP.ms but our list matching missed it — re-list and reuse
+        if ($status !== 'success') {
+            // The create may still have gone through on VoIP.ms's side —
+            // timeouts ("no_response") and used_username both mean the account
+            // can exist even though we saw a failure. Re-list before erroring.
             $existing = $findSub(voipms_call($apiUser, $apiPass, 'getSubAccounts') ?? []);
-            if (!$existing) err('VoIP.ms says this username is taken but it is not in your sub-account list — check the sub-accounts in your VoIP.ms portal', 502);
+            if (!$existing) err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status), 502);
             $sipUsername = $reuse($existing);
-        } elseif (!$result || $status !== 'success') {
-            err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status), 502);
         } else {
             // VoIP.ms returns the full account name ("<mainaccount>_<subname>")
             $sipUsername = $result['account'] ?? null;
