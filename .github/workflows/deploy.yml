@@ -1,0 +1,47 @@
+name: Build for Hostinger
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allows manual build from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build-deploy-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Assemble deploy folder
+        run: |
+          mkdir -p deploy/api
+          cp -r dist/. deploy/
+          cp api/index.php api/.htaccess api/config.php deploy/api/
+          # config.php contains NO secrets — it loads credentials from
+          # oasis-config.php which lives OUTSIDE public_html on the server.
+
+      - name: Push to hostinger-deploy branch
+        run: |
+          cd deploy
+          git init -b hostinger-deploy
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Deploy build ${{ github.sha }}"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push -f origin hostinger-deploy
