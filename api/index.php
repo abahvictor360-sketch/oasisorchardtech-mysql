@@ -1813,13 +1813,15 @@ case 'voipms':
 
 // ═══ VOIP.MS SUB-ACCOUNT PROVISIONING ════════════════════════════
 case 'provision':
-    // createSubAccount can be slow on VoIP.ms's side. Give this script a bit
-    // more room than the shared-host default (harmless no-op if disabled) —
-    // but the flow below is still kept short overall, since the *host's*
-    // gateway timeout can't be raised from here: if PHP gets killed mid
-    // request the browser sees an empty response ("Request failed") even
-    // though the createSubAccount call already reached VoIP.ms.
-    if (function_exists('set_time_limit')) @set_time_limit(55);
+    // createSubAccount is a slow WRITE on VoIP.ms's side — routinely 20-35s.
+    // The whole reason this endpoint kept failing with "no_response" was a
+    // 20s curl timeout that gave up before VoIP.ms ever answered, so we
+    // never got a direct success and instead fell through to re-checks that
+    // ran before the account was queryable. We now wait long enough for the
+    // create to actually return, so success is captured directly and we no
+    // longer depend on VoIP.ms's indexing lag. PHP's own limit is raised to
+    // match (harmless no-op if disabled).
+    if (function_exists('set_time_limit')) @set_time_limit(120);
 
     $admin = authUser($pdo, true);
 
@@ -1865,17 +1867,27 @@ case 'provision':
     // matches ours, also handling truncated names an older code version
     // created before the 12-char limit was enforced. Returns the full entry.
     $findSub = function ($list) use ($subname, $userEmail) {
+        $wantEmail = strtolower(trim($userEmail));
+        $wantSub   = strtolower($subname);
         foreach (($list['accounts'] ?? []) as $a) {
-            $desc = $a['description'] ?? '';
-            if ($userEmail !== '' && $desc === $userEmail) return $a;
+            // (1) description == the user's email is the most reliable key —
+            // it doesn't depend on how VoIP.ms formatted the username.
+            // Compared case-insensitively/trimmed since VoIP.ms can normalise it.
+            $desc = strtolower(trim($a['description'] ?? ''));
+            if ($wantEmail !== '' && $desc === $wantEmail) return $a;
 
-            $acct = $a['account'] ?? '';
+            // (2) match on the username. VoIP.ms may truncate or change case,
+            // so compare loosely: exact sub-portion, either being a prefix of
+            // the other, or the full account simply containing our (distinctive,
+            // user-id-derived) subname.
+            $acct = strtolower($a['account'] ?? '');
             if ($acct === '') continue;
             $pos = strrpos($acct, '_');
             $sub = $pos !== false ? substr($acct, $pos + 1) : $acct;
-            if ($sub === $subname
-                || (strlen($sub) >= 8 && strpos($subname, $sub) === 0)      // stored name truncated vs. ours
-                || (strlen($subname) >= 8 && strpos($sub, $subname) === 0)  // ours truncated vs. stored
+            if ($sub === $wantSub
+                || (strlen($sub) >= 6 && strpos($wantSub, $sub) === 0)      // stored name truncated vs. ours
+                || (strlen($wantSub) >= 6 && strpos($sub, $wantSub) === 0)  // ours truncated vs. stored
+                || strpos($acct, $wantSub) !== false                        // subname appears anywhere
             ) return $a;
         }
         return null;
@@ -1919,31 +1931,28 @@ case 'provision':
     $sipUsername = $existing ? $reuse($existing) : null;
 
     if ($sipUsername === null) {
-        // Create the sub-account on VoIP.ms — the other call known to be slow.
-        // Deliberately NOT wrapped in a retry-with-sleep loop here: chaining
-        // several long-timeout calls in one request risks exceeding the
-        // host's own script/gateway time limit, which kills PHP with an empty
-        // response before it can tell the browser anything (looks like
-        // "request failed" even though VoIP.ms received and processed it).
+        // Create the sub-account on VoIP.ms. Given a generous 45s timeout so
+        // the (slow) write actually finishes and returns 'success' directly —
+        // that's the reliable path, because it hands us the account name and
+        // needs no follow-up lookup at all. The re-check below only matters
+        // in the rare case curl still gives up before VoIP.ms answers.
         $result = voipms_call($apiUser, $apiPass, 'createSubAccount', array_merge($subParams, [
             'username' => $subname,
             'password' => $sipPass,
-        ]), 20);
+        ]), 45);
         $status = $result['status'] ?? 'no_response';
-        if ($status !== 'success') {
+        if ($status !== 'success' && $status !== 'used_username') {
             // The create may still have gone through on VoIP.ms's side —
-            // timeouts ("no_response") and used_username both mean the account
-            // can exist even though we saw a failure. Re-check twice: once
-            // immediately, then once more after a short pause in case VoIP.ms
-            // just hasn't indexed the account yet. Kept short (well under the
-            // 55s time_limit set above) so we don't risk the host's own
-            // gateway timeout killing the request with an empty response.
-            $recheck = voipms_call($apiUser, $apiPass, 'getSubAccounts');
-            $existing = ($recheck && ($recheck['status'] ?? '') === 'success') ? $findSub($recheck) : null;
-            if (!$existing) {
-                sleep(3);
-                $recheck = voipms_call($apiUser, $apiPass, 'getSubAccounts', [], 10);
+            // "no_response" (curl gave up) and "used_username" both mean the
+            // account can exist even though we didn't get a clean success.
+            // Re-check a few times with short pauses, in case VoIP.ms hasn't
+            // finished indexing it yet.
+            $existing = null;
+            foreach ([0, 4, 6] as $wait) {
+                if ($wait) sleep($wait);
+                $recheck  = voipms_call($apiUser, $apiPass, 'getSubAccounts', [], 15);
                 $existing = ($recheck && ($recheck['status'] ?? '') === 'success') ? $findSub($recheck) : null;
+                if ($existing) break;
             }
             if (!$existing) {
                 $seen = array_map(
@@ -1951,12 +1960,19 @@ case 'provision':
                     $recheck['accounts'] ?? []
                 );
                 error_log('[VoIP.ms provision] wanted subname=' . $subname . ' email=' . $userEmail
-                    . ' — accounts seen: ' . ($seen ? implode(', ', $seen) : 'none'));
+                    . ' status=' . $status . ' — accounts seen: ' . ($seen ? implode(', ', $seen) : 'none'));
                 err('VoIP.ms sub-account creation failed: ' . $status . voipms_error_hint($status)
                     . '. If this keeps happening right after clicking Provision, wait about 30 seconds '
                     . 'and click Provision again — VoIP.ms may still be indexing the account, and the '
                     . 'existing-account check will find and reuse it instead of erroring.', 502);
             }
+            $sipUsername = $reuse($existing);
+        } elseif ($status === 'used_username') {
+            // Account already exists under our deterministic name — look it up
+            // and reuse it (reset password) rather than treating it as an error.
+            $recheck  = voipms_call($apiUser, $apiPass, 'getSubAccounts', [], 15);
+            $existing = ($recheck && ($recheck['status'] ?? '') === 'success') ? $findSub($recheck) : null;
+            if (!$existing) err('VoIP.ms reports the sub-account already exists but it could not be found to reuse', 502);
             $sipUsername = $reuse($existing);
         } else {
             // VoIP.ms returns the full account name ("<mainaccount>_<subname>")
