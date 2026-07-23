@@ -1819,7 +1819,7 @@ case 'provision':
     // gateway timeout can't be raised from here: if PHP gets killed mid
     // request the browser sees an empty response ("Request failed") even
     // though the createSubAccount call already reached VoIP.ms.
-    if (function_exists('set_time_limit')) @set_time_limit(45);
+    if (function_exists('set_time_limit')) @set_time_limit(55);
 
     $admin = authUser($pdo, true);
 
@@ -1933,12 +1933,18 @@ case 'provision':
         if ($status !== 'success') {
             // The create may still have gone through on VoIP.ms's side —
             // timeouts ("no_response") and used_username both mean the account
-            // can exist even though we saw a failure. One quick re-check (no
-            // sleep/retry loop) before treating it as a real failure; if
-            // VoIP.ms just hasn't indexed it yet, the same "already exists"
-            // check at the top of this endpoint will pick it up next time.
+            // can exist even though we saw a failure. Re-check twice: once
+            // immediately, then once more after a short pause in case VoIP.ms
+            // just hasn't indexed the account yet. Kept short (well under the
+            // 55s time_limit set above) so we don't risk the host's own
+            // gateway timeout killing the request with an empty response.
             $recheck = voipms_call($apiUser, $apiPass, 'getSubAccounts');
             $existing = ($recheck && ($recheck['status'] ?? '') === 'success') ? $findSub($recheck) : null;
+            if (!$existing) {
+                sleep(3);
+                $recheck = voipms_call($apiUser, $apiPass, 'getSubAccounts', [], 10);
+                $existing = ($recheck && ($recheck['status'] ?? '') === 'success') ? $findSub($recheck) : null;
+            }
             if (!$existing) {
                 $seen = array_map(
                     fn($a) => ($a['account'] ?? '?') . ' (' . ($a['description'] ?? '') . ')',
