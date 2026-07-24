@@ -1,0 +1,1 @@
+import{t as e}from"./vendor-react-AEWOKQ-0.js";var t=e();function n({children:e,className:n=``,hover:r=!1}){return(0,t.jsx)(`div`,{className:[`bg-white rounded-xl shadow-sm border border-gray-100`,`transition-shadow duration-200`,r?`hover:shadow-lg`:``,n].filter(Boolean).join(` `),children:e})}export{n as t};

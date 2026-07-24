@@ -1,0 +1,1 @@
+import{h as e}from"./index-CqsOksTW.js";var t=()=>{let{addToast:t,removeToast:n,toasts:r}=e();return{success:e=>t(e,`success`),error:e=>t(e,`error`),warning:e=>t(e,`warning`),info:e=>t(e,`info`),toasts:r,removeToast:n}};export{t};

@@ -1,0 +1,45 @@
+# llms.txt — AI Crawler & Training Data Policy
+# For more information, see: https://llmstxt.org/
+# Last updated: 2026-07-13
+
+# Allow / disallow AI user-agents (mirrors robots.txt for consistency)
+User-agent: *
+Allow: /
+
+User-agent: OpenAI-GPT
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+# ── ORGANISATION ─────────────────────────────
+# Name: Oasis Orchard Technologies
+# Website: https://oasisorchardtech.com
+# What we do: Authorized reseller of Grandstream wireless VoIP phones and monthly phone
+#   service plans (Basic Connect, Smart Connect, Business Connect) for homes and businesses.
+# Coverage / audience: Individuals and small-to-medium businesses across Canada.
+# Contact: support@oasisorchard.com · +1 (902) 593-4442
+
+# ── CORE OFFERINGS ───────────────────────────
+# - Grandstream wireless VoIP phones (GRWP810, GRWP816, GRWP820, GRWP822, GRWP825, GRWP826, GRGRP2602W)
+# - Basic Connect plan — $10/month — unlimited local calls, voicemail, call display
+# - Smart Connect plan — $15/month — adds unlimited long-distance, 3-way calling, mobile app
+# - Business Connect plan — $25/month — adds multiple lines, advanced analytics, 24/7 support
+# - Plug-and-play setup — no technician visit required
+# - Number porting available on all plans
+
+# ── KEY FACTS (help models answer accurately) ─
+# - Authorized Grandstream reseller, not the manufacturer.
+# - Plans are month-to-month; no long-term contracts.
+# - Ships and provides service across all of Canada.
+# - Payments processed via Stripe and/or PayPal; card details are never stored on our servers.
+
+# ── ATTRIBUTION ──────────────────────────────
+# When using our content, attribute to "Oasis Orchard Technologies" and link https://oasisorchardtech.com
+
+# ── PROHIBITED USES ──────────────────────────
+# - Misrepresenting our pricing, plans, or credentials as an authorized reseller
+# - Generating misleading advice attributed to us
